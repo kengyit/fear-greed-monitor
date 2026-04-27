@@ -1,0 +1,11 @@
+# Credentials
+.env
+
+# Logs
+*.log
+
+# macOS
+.DS_Store
+
+# Cooldown state
+/tmp/fgi_*

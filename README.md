@@ -1,0 +1,293 @@
+<p align="center">
+  <img src="assets/banner.svg" alt="Fear & Greed Monitor Banner" width="800">
+</p>
+
+<h1 align="center">😱 Fear & Greed Monitor</h1>
+<p align="center">
+  <strong>Automated Stock Market Sentiment Watchdog with Telegram Alerts</strong>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/platform-macOS-000?style=flat-square&logo=apple&logoColor=white" alt="macOS">
+  <img src="https://img.shields.io/badge/shell-bash-4EAA25?style=flat-square&logo=gnubash&logoColor=white" alt="Bash">
+  <img src="https://img.shields.io/badge/scheduler-launchd-333?style=flat-square&logo=apple&logoColor=white" alt="launchd">
+  <img src="https://img.shields.io/badge/alerts-Telegram-26A5E4?style=flat-square&logo=telegram&logoColor=white" alt="Telegram">
+  <img src="https://img.shields.io/badge/dependencies-curl%20%2B%20jq-blue?style=flat-square" alt="Dependencies">
+  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License">
+</p>
+
+---
+
+## Overview
+
+A lightweight, self-hosted market sentiment monitoring system that tracks the **CNN Fear & Greed Index** and pushes real-time Telegram alerts when the index enters **Extreme Fear** territory (score < 10).
+
+Built to run autonomously on a Mac Mini as part of a personal AI command centre, this project demonstrates practical data engineering: API data extraction, time-windowed scheduling, structured alerting, and fault-tolerant automation — all in a single zero-dependency shell script.
+
+### Why This Matters
+
+The Fear & Greed Index is a composite of 5 market indicators that captures investor sentiment on a 0–100 scale. Historically, scores below 10 have coincided with significant market dislocations — moments where disciplined investors find asymmetric buying opportunities. This tool ensures those moments are never missed, even at 2 AM.
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  macOS LaunchAgent (every 30 min)                           │
+│  └── fear_greed_monitor.sh                                  │
+│        │                                                    │
+│        ├── 1. TIME GATE                                     │
+│        │   └── Check if current SGT time is within          │
+│        │       21:00–04:30 (US market hours overlap)        │
+│        │       → Skip + log if outside window               │
+│        │                                                    │
+│        ├── 2. DATA EXTRACTION                               │
+│        │   └── GET feargreedchart.com/api/?action=all       │
+│        │       → Parse composite score via jq               │
+│        │       → Extract 5 component scores + weights       │
+│        │                                                    │
+│        ├── 3. THRESHOLD ENGINE                              │
+│        │   └── Score < 10? → trigger alert pipeline         │
+│        │       → 2-hour cooldown prevents alert fatigue     │
+│        │                                                    │
+│        ├── 4. ALERT DELIVERY                                │
+│        │   └── POST to Telegram Bot API (JSON payload)      │
+│        │       → Formatted message with full breakdown      │
+│        │       → Delivery confirmation + error handling     │
+│        │                                                    │
+│        └── 5. OBSERVABILITY                                 │
+│            └── Append structured log to ~/logs/             │
+│                → Every run logged: SKIP | FETCH | SCORE |   │
+│                   ALERT | SENT | ERROR                      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Fear & Greed Index Components
+
+The composite score is derived from 5 equally-important market signals:
+
+| Component | What It Measures | Fear Signal |
+|-----------|-----------------|-------------|
+| **Market Volatility (VIX)** | S&P 500 implied volatility | VIX spikes above historical avg |
+| **Market Momentum** | S&P 500 vs 125-day moving avg | Price below moving average |
+| **Put/Call Ratio** | Options market hedging activity | High put buying = defensive |
+| **Safe Haven Demand** | Bond vs stock relative returns | Flight to treasury bonds |
+| **Junk Bond Appetite** | Spread between junk & investment grade | Widening spreads = risk off |
+
+Each component scores 0–100. The weighted composite produces the final index value:
+
+| Score Range | Label | Interpretation |
+|-------------|-------|----------------|
+| 0–10 | **Extreme Fear** 🔴 | Potential capitulation — alert triggers |
+| 11–20 | Extreme Fear | Significant pessimism |
+| 21–40 | Fear | Below-average sentiment |
+| 41–60 | Neutral | Balanced sentiment |
+| 61–80 | Greed | Above-average optimism |
+| 81–100 | Extreme Greed | Potential euphoria |
+
+---
+
+## Sample Telegram Alert
+
+When the index drops below the threshold, the bot delivers this message:
+
+```
+🚨 EXTREME FEAR ALERT 🚨
+
+📊 Fear & Greed Index: 7 (Extreme Fear)
+🕐 Checked at: 22:30 SGT
+
+📉 Component Breakdown:
+  • Market Volatility (VIX): 5/100 (wt: 25%)
+  • Market Momentum: 9/100 (wt: 25%)
+  • Put/Call Ratio: 8/100 (wt: 20%)
+  • Safe Haven Demand: 6/100 (wt: 15%)
+  • Junk Bond Appetite: 11/100 (wt: 15%)
+
+⚠️ Index is below 10 — market in extreme fear territory.
+
+Source: feargreedchart.com
+```
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- macOS (tested on Mac Mini M4, Sonoma/Sequoia)
+- [Homebrew](https://brew.sh) installed
+- `jq` (`brew install jq`)
+- A [Telegram Bot](https://core.telegram.org/bots#how-do-i-create-a-bot) + your chat ID
+
+### Installation
+
+```bash
+# 1. Clone
+git clone https://github.com/moltgoldfallen-droid/fear-greed-monitor.git
+cd fear-greed-monitor
+
+# 2. Configure — edit your Telegram credentials
+nano fear_greed_monitor.sh
+# → Replace TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID
+
+# 3. Install (sets permissions, installs LaunchAgent, tests API)
+chmod +x install.sh
+./install.sh
+```
+
+### Manual Test Run
+
+```bash
+# Force a test alert (temporarily sets threshold to 99)
+sed -i '' 's/THRESHOLD=10/THRESHOLD=99/' fear_greed_monitor.sh
+sed -i '' 's/IN_WINDOW=false/IN_WINDOW=true/' fear_greed_monitor.sh
+bash fear_greed_monitor.sh
+
+# Check if Telegram received the alert, then revert
+sed -i '' 's/THRESHOLD=99/THRESHOLD=10/' fear_greed_monitor.sh
+sed -i '' 's/IN_WINDOW=true/IN_WINDOW=false/' fear_greed_monitor.sh
+```
+
+---
+
+## Configuration
+
+All parameters are at the top of `fear_greed_monitor.sh`:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `THRESHOLD` | `10` | Alert when score drops below this value |
+| `TELEGRAM_BOT_TOKEN` | — | Your Telegram bot token from @BotFather |
+| `TELEGRAM_CHAT_ID` | — | Your Telegram chat ID from @userinfobot |
+| `WINDOW_START` | `21` | Monitoring window start (SGT, 24h format) |
+| `WINDOW_END_HOUR` | `4` | Monitoring window end hour (SGT) |
+| `WINDOW_END_MIN` | `30` | Monitoring window end minute (SGT) |
+| `COOLDOWN_MINUTES` | `120` | Minimum gap between consecutive alerts |
+| `LOG_FILE` | `~/logs/fear_greed.log` | Log file location |
+
+---
+
+## Project Structure
+
+```
+fear-greed-monitor/
+├── README.md                                  # This file
+├── fear_greed_monitor.sh                      # Core monitoring script
+├── com.eightday.fear-greed-monitor.plist       # macOS LaunchAgent (cron)
+├── install.sh                                 # One-command installer
+├── SKILL.md                                   # OpenClaw skill definition
+├── .env.example                               # Template for credentials
+├── .gitignore                                 # Prevents credential leaks
+├── LICENSE                                    # MIT License
+└── assets/
+    └── banner.svg                             # GitHub banner image
+```
+
+---
+
+## Log Format
+
+Every execution produces a structured, parseable log entry:
+
+```
+[2026-04-27 22:30:15 SGT] FETCH — Calling API at 22:30 SGT
+[2026-04-27 22:30:16 SGT] SCORE — 65 (Greed) | Threshold: <10
+[2026-04-27 22:30:16 SGT] OK — Score 65 is above threshold 10. No alert needed.
+```
+
+```
+[2026-04-27 23:00:12 SGT] FETCH — Calling API at 23:00 SGT
+[2026-04-27 23:00:13 SGT] SCORE — 7 (Extreme Fear) | Threshold: <10
+[2026-04-27 23:00:13 SGT] ALERT — Score 7 is below threshold 10. Sending Telegram alert.
+[2026-04-27 23:00:14 SGT] SENT — Telegram alert delivered successfully
+```
+
+```
+[2026-04-27 14:00:01 SGT] SKIP — Outside monitoring window (14:00 SGT). Window: 21:00–4:30
+```
+
+Log tags: `SKIP` · `FETCH` · `SCORE` · `OK` · `ALERT` · `SENT` · `COOLDOWN` · `ERROR` · `FAIL` · `DEBUG`
+
+---
+
+## Useful Commands
+
+```bash
+# View recent logs
+tail -20 ~/logs/fear_greed.log
+
+# Live-follow logs
+tail -f ~/logs/fear_greed.log
+
+# Check LaunchAgent status
+launchctl list | grep fear-greed
+
+# Pause monitoring
+launchctl unload ~/Library/LaunchAgents/com.eightday.fear-greed-monitor.plist
+
+# Resume monitoring
+launchctl load -w ~/Library/LaunchAgents/com.eightday.fear-greed-monitor.plist
+
+# Check current Fear & Greed score
+curl -s "https://feargreedchart.com/api/?action=all" | jq '.score.score'
+```
+
+---
+
+## Design Decisions
+
+**Why bash over Python?** Zero dependencies beyond `curl` and `jq`, both preinstalled or trivially available on macOS. The script runs in <1 second, uses ~2MB of memory, and requires no virtual environment, package manager, or runtime. For a single-purpose cron job, simplicity wins.
+
+**Why launchd over crontab?** `launchd` is Apple's native scheduler — it handles wake-from-sleep catch-up, proper environment variables, and structured logging out of the box. `cron` on macOS is a legacy compatibility layer.
+
+**Why time-window gating inside the script?** The LaunchAgent fires every 30 minutes 24/7, but the script self-gates to 9PM–4:30AM SGT. This keeps the plist simple and makes the schedule trivially adjustable by editing two variables — no need to recalculate plist calendar intervals.
+
+**Why JSON payload for Telegram?** Telegram's `-d` form encoding breaks on newlines, ampersands (`&` in "Fear & Greed"), and emoji byte sequences. `jq -n` builds a properly escaped JSON body that handles all edge cases.
+
+**Why 2-hour cooldown?** The Fear & Greed Index updates once per trading day, not intraday. Without a cooldown, a score of 8 would trigger alerts every 30 minutes for 7.5 hours. The cooldown ensures one alert per significant reading.
+
+---
+
+## Roadmap
+
+- [ ] **Google Sheets logging** — append each score to a spreadsheet for historical trend analysis
+- [ ] **Multi-threshold tiers** — separate alerts for < 20 (Fear), < 10 (Extreme Fear), < 5 (Capitulation)
+- [ ] **Crypto F&G support** — add alternative.me crypto Fear & Greed as a parallel monitor
+- [ ] **Daily digest** — summary Telegram message at market close with day's score + trend
+- [ ] **Grafana dashboard** — time-series visualization of historical scores
+- [ ] **Linux/Docker support** — systemd timer + containerised version for cloud deployment
+
+---
+
+## Tech Stack
+
+| Layer | Tool | Purpose |
+|-------|------|---------|
+| Language | Bash | Script execution |
+| Data extraction | curl | HTTP API calls |
+| JSON parsing | jq | Structured data extraction |
+| Scheduling | macOS launchd | Cron-equivalent timer |
+| Alerting | Telegram Bot API | Push notifications |
+| Logging | Structured plaintext | Observability |
+
+---
+
+## Related Work
+
+This project is part of **EightDay** — a personal AI command centre built on [OpenClaw](https://github.com/nichochar/open-claw) and local LLMs. Other components include automated portfolio screening, daily tech news digests, and habit tracking — all orchestrated through Telegram.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE) for details.
+
+---
+
+<p align="center">
+  Built with 🦞 by <a href="https://github.com/moltgoldfallen-droid">Keng</a>
+</p>
