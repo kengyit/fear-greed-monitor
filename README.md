@@ -246,6 +246,7 @@ fear-greed-monitor/
 ├── fear_greed_monitor.sh                      # Core monitoring script (alert + daily modes)
 ├── com.eightday.fear-greed-monitor.plist       # LaunchAgent: alert mode, every 30 min
 ├── com.eightday.fear-greed-daily.plist         # LaunchAgent: daily summary at 21:35 SGT
+├── com.eightday.fear-greed-listener.plist      # LaunchAgent: 🔄 refresh-button listener
 ├── install.sh                                 # One-command installer
 ├── SKILL.md                                   # OpenClaw skill definition
 ├── .env.example                               # Template for credentials
@@ -297,6 +298,11 @@ launchctl list | grep fear-greed
 # Test the daily summary right now (ignores the send-time gate and the
 # once-per-day guard, and does NOT count as today's send)
 bash fear_greed_monitor.sh --daily --test
+
+# On-demand refresh from Telegram: tap the 🔄 Refresh data button on any
+# daily message, or send /refresh (or /now) to the bot — the listener
+# agent replies with a freshly-fetched summary. Requires exclusive use
+# of the bot's getUpdates (don't poll the same bot from another app).
 
 # Trigger the daily summary manually (respects the gates — only sends
 # after 21:35 SGT and at most once per day)

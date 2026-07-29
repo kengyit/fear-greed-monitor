@@ -84,6 +84,7 @@ All config is at the top of `fear_greed_monitor.sh`:
 - `fear_greed_monitor.sh` — main executable script (alert + `--daily` modes)
 - `com.eightday.fear-greed-monitor.plist` — LaunchAgent: alert mode, every 30 min
 - `com.eightday.fear-greed-daily.plist` — LaunchAgent: daily summary at 21:35 SGT
+- `com.eightday.fear-greed-listener.plist` — LaunchAgent: KeepAlive daemon that long-polls Telegram; a tap on the message's 🔄 Refresh button (or /refresh, /now) sends a freshly-fetched summary
 - `install.sh` — one-command installer (installs both agents)
 
 ## Telegram Daily Summary Format (21:35 SGT, unconditional)
