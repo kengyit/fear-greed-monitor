@@ -124,10 +124,10 @@ Every day at 9:35 PM SGT, regardless of the score:
 📅 2026-07-29, 21:35 SGT
 
 📉 Index:
-  • S&P500: 6,365 (down: 0.3%)
-  • Nasdaq: 21,098 (up: 0.2%)
-  • HSI: 25,524 (up: 0.7%)
-  • Bitcoin: 118,024 (down: 1.2%)
+  • S&P500: 6,365 (🔴 -0.3%)
+  • Nasdaq: 21,098 (🟢 +0.2%)
+  • HSI: 25,524 (🟢 +0.7%)
+  • Bitcoin: 118,024 (🔴 -1.2%)
   • Interest Rate: 4.25% (last: 4.33% (as of 1/6/2026))
   • CPI: 2.6% (last: 2.4% (as of 1/6/2026))
   • Unemployment Rate: 4.2% (last: 4.1% (as of 1/6/2026))

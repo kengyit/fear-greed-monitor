@@ -122,7 +122,7 @@ add_commas() {
 
 yahoo_line() {
     # $1 = display name, $2 = URL-encoded Yahoo symbol
-    # Prints: "  • S&P500: 6,364 (down: 0.3%)"
+    # Prints: "  • S&P500: 6,364 (🔴 -0.3%)" / "  • HSI: 25,808 (🟢 +2.0%)"
     # IMPORTANT: range must be 1d — with a longer range, Yahoo's
     # chartPreviousClose is the close before the range START (days ago),
     # which silently turns the %% into a multi-day cumulative move.
@@ -137,10 +137,10 @@ yahoo_line() {
     fi
     pct=$(awk -v p="$price" -v q="$prev" 'BEGIN { printf "%.1f", (p - q) / q * 100 }')
     case "$pct" in
-        -*) dir="down"; pct="${pct#-}" ;;
-        *)  dir="up" ;;
+        -*) dir="🔴 -"; pct="${pct#-}" ;;
+        *)  dir="🟢 +" ;;
     esac
-    echo "  • ${1}: $(add_commas "$price") (${dir}: ${pct}%)"
+    echo "  • ${1}: $(add_commas "$price") (${dir}${pct}%)"
 }
 
 fred_date_fmt() {
