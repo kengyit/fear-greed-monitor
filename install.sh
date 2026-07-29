@@ -9,6 +9,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLIST_NAME="com.eightday.fear-greed-monitor.plist"
 DAILY_PLIST_NAME="com.eightday.fear-greed-daily.plist"
+LISTENER_PLIST_NAME="com.eightday.fear-greed-listener.plist"
 LAUNCH_AGENTS="$HOME/Library/LaunchAgents"
 
 echo ""
@@ -101,7 +102,7 @@ mkdir -p "$LAUNCH_AGENTS"
 
 SCRIPT_PATH="$SCRIPT_DIR/fear_greed_monitor.sh"
 
-for PLIST in "$PLIST_NAME" "$DAILY_PLIST_NAME"; do
+for PLIST in "$PLIST_NAME" "$DAILY_PLIST_NAME" "$LISTENER_PLIST_NAME"; do
     # Unload existing if present
     launchctl unload "$LAUNCH_AGENTS/$PLIST" 2>/dev/null || true
 
@@ -120,7 +121,8 @@ echo "✅ Installation complete!"
 echo ""
 echo "   Alert mode:  Every 30 min, 9:00 PM – 4:30 AM SGT, score < ${FGI_THRESHOLD:-10}"
 echo "   Daily mode:  Every day at ${FGI_DAILY_HOUR:-21}:$(printf '%02d' "${FGI_DAILY_MIN:-35}") SGT, regardless of score"
-echo "   Auto-start:  Both agents reload and run at every boot/login"
+echo "   Refresh:     🔄 button on the daily message (or send /refresh to the bot)"
+echo "   Auto-start:  All agents reload and run at every boot/login"
 echo "   Alert:       Telegram push notification"
 echo "   Logs:        ${FGI_LOG_FILE:-$HOME/logs/fear_greed.log}"
 echo ""

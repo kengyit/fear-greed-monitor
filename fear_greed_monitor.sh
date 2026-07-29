@@ -28,8 +28,9 @@ MODE="alert"
 FORCE_TEST=false
 for arg in "$@"; do
     case "$arg" in
-        --daily) MODE="daily" ;;
-        --test)  FORCE_TEST=true ;;
+        --daily)    MODE="daily" ;;
+        --test)     FORCE_TEST=true ;;
+        --listener) MODE="listener" ;;
     esac
 done
 
@@ -83,10 +84,13 @@ log() {
 }
 
 # ─── TELEGRAM SENDER ────────────────────────────────────────
-# send_telegram "message text" — returns 0 on delivery, 1 on failure
+# send_telegram "message text" [with_refresh]
+# Returns 0 on delivery, 1 on failure. Passing "with_refresh" attaches
+# an inline 🔄 button that triggers a fresh summary (see --listener).
 
 send_telegram() {
     local message="$1"
+    local with_button="${2:-}"
     local payload result ok err
 
     # JSON payload for proper encoding of newlines, emoji, ampersands
@@ -94,6 +98,11 @@ send_telegram() {
         --arg chat_id "$TELEGRAM_CHAT_ID" \
         --arg text "$message" \
         '{chat_id: $chat_id, text: $text}')
+
+    if [ "$with_button" = "with_refresh" ]; then
+        payload=$(echo "$payload" | jq \
+            '. + {reply_markup: {inline_keyboard: [[{text: "🔄 Refresh data", callback_data: "fgi_refresh"}]]}}')
+    fi
 
     result=$(curl -s --max-time 10 \
         -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
@@ -223,6 +232,68 @@ news_lines() {
         fi
     done <<< "$items"
 }
+
+# ─── TELEGRAM LISTENER (refresh button) ────────────────────
+# Long-polls Telegram for taps on the 🔄 Refresh button (or a typed
+# /refresh command) and responds with a freshly-fetched summary.
+# Runs forever under its own KeepAlive LaunchAgent; only requests
+# from TELEGRAM_CHAT_ID are honored.
+
+if [ "$MODE" = "listener" ]; then
+    OFFSET_FILE="${FGI_TG_OFFSET_FILE:-$HOME/.fear_greed_tg_offset}"
+    log "LISTENER — Telegram listener started (long-poll)."
+    set +e  # a long-running daemon must survive transient errors
+
+    while true; do
+        OFFSET=$(cat "$OFFSET_FILE" 2>/dev/null)
+        [ -z "$OFFSET" ] && OFFSET=0
+
+        UPDATES=$(curl -s --max-time 60 \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates?timeout=50&offset=${OFFSET}" 2>/dev/null)
+        OK=$(echo "$UPDATES" | jq -r '.ok // false' 2>/dev/null)
+        if [ "$OK" != "true" ]; then
+            ERR=$(echo "$UPDATES" | jq -r '.description // "no response"' 2>/dev/null)
+            log "LISTENER — getUpdates failed ($ERR). Retrying in 10s."
+            sleep 10
+            continue
+        fi
+
+        COUNT=$(echo "$UPDATES" | jq -r '.result | length' 2>/dev/null)
+        if [ -z "$COUNT" ] || [ "$COUNT" -eq 0 ]; then
+            continue
+        fi
+
+        LAST_ID=$(echo "$UPDATES" | jq -r '.result[-1].update_id')
+        echo $((LAST_ID + 1)) > "$OFFSET_FILE"
+
+        for i in $(seq 0 $((COUNT - 1))); do
+            U=$(echo "$UPDATES" | jq ".result[$i]")
+            CB_ID=$(echo "$U" | jq -r '.callback_query.id // empty')
+            CB_DATA=$(echo "$U" | jq -r '.callback_query.data // empty')
+            CB_FROM=$(echo "$U" | jq -r '.callback_query.from.id // empty')
+            MSG_TEXT=$(echo "$U" | jq -r '.message.text // empty')
+            MSG_FROM=$(echo "$U" | jq -r '.message.from.id // empty')
+
+            TRIGGER=false
+            if [ -n "$CB_ID" ] && [ "$CB_DATA" = "fgi_refresh" ] && [ "$CB_FROM" = "$TELEGRAM_CHAT_ID" ]; then
+                # Acknowledge the tap so the button stops its spinner
+                curl -s --max-time 10 \
+                    -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery" \
+                    -d "callback_query_id=${CB_ID}" \
+                    -d "text=Refreshing — pulling latest data…" >/dev/null 2>&1
+                TRIGGER=true
+            elif [ "$MSG_FROM" = "$TELEGRAM_CHAT_ID" ] && { [ "$MSG_TEXT" = "/refresh" ] || [ "$MSG_TEXT" = "/now" ]; }; then
+                TRIGGER=true
+            fi
+
+            if [ "$TRIGGER" = true ]; then
+                log "LISTENER — Refresh requested via Telegram. Sending fresh summary."
+                bash "$0" --daily --test || log "LISTENER — Refresh run failed."
+            fi
+        done
+    done
+    # not reached
+fi
 
 # ─── MODE GATES ─────────────────────────────────────────────
 
@@ -419,7 +490,7 @@ ${SNAPSHOT}
 EOF
 )
 
-    if send_telegram "$MESSAGE"; then
+    if send_telegram "$MESSAGE" with_refresh; then
         log "DAILY-SENT — Daily summary delivered successfully"
         # A --test send doesn't count as today's summary
         if [ "$FORCE_TEST" = false ]; then
