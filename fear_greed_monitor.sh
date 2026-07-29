@@ -13,6 +13,9 @@
 #              score every day at 9:35 PM SGT, regardless of value.
 #              Safe to re-run: only one summary is sent per day, and
 #              a missed run (machine was off) is caught up on boot.
+#   --test     With --daily: send immediately, ignoring the send-time
+#              gate and the once-per-day guard, and WITHOUT marking
+#              today as sent — the scheduled 21:35 send still happens.
 #
 # Part of the EightDay personal AI command centre.
 # ============================================================
@@ -22,9 +25,13 @@ set -euo pipefail
 # ─── MODE ───────────────────────────────────────────────────
 
 MODE="alert"
-if [ "${1:-}" = "--daily" ]; then
-    MODE="daily"
-fi
+FORCE_TEST=false
+for arg in "$@"; do
+    case "$arg" in
+        --daily) MODE="daily" ;;
+        --test)  FORCE_TEST=true ;;
+    esac
+done
 
 # ─── CONFIGURATION ──────────────────────────────────────────
 
@@ -193,20 +200,25 @@ news_lines() {
 # ─── MODE GATES ─────────────────────────────────────────────
 
 if [ "$MODE" = "daily" ]; then
-    # Daily mode fires unconditionally at 9:35 SGT. The plist also runs
+    # Daily mode fires unconditionally at 9:35 PM SGT. The plist also runs
     # this at load (boot/login), so gate on time-of-day and a once-per-day
     # marker: send only at/after DAILY_HOUR:DAILY_MIN, and only once.
-    NOW_MINUTES=$(( SGT_HOUR * 60 + SGT_MIN ))
-    DAILY_MINUTES=$(( DAILY_HOUR * 60 + DAILY_MIN ))
+    # --test bypasses both gates for manual verification.
+    if [ "$FORCE_TEST" = true ]; then
+        log "DAILY-TEST — Manual test run: bypassing time gate and once-per-day guard."
+    else
+        NOW_MINUTES=$(( SGT_HOUR * 60 + SGT_MIN ))
+        DAILY_MINUTES=$(( DAILY_HOUR * 60 + DAILY_MIN ))
 
-    if [ "$NOW_MINUTES" -lt "$DAILY_MINUTES" ]; then
-        log "DAILY-SKIP — $SGT_TIME is before daily send time (${DAILY_HOUR}:$(printf '%02d' "$DAILY_MIN") SGT)."
-        exit 0
-    fi
+        if [ "$NOW_MINUTES" -lt "$DAILY_MINUTES" ]; then
+            log "DAILY-SKIP — $SGT_TIME is before daily send time (${DAILY_HOUR}:$(printf '%02d' "$DAILY_MIN") SGT)."
+            exit 0
+        fi
 
-    if [ -f "$DAILY_STATE_FILE" ] && [ "$(cat "$DAILY_STATE_FILE")" = "$SGT_DATE" ]; then
-        log "DAILY-SKIP — Summary already sent today ($SGT_DATE)."
-        exit 0
+        if [ -f "$DAILY_STATE_FILE" ] && [ "$(cat "$DAILY_STATE_FILE")" = "$SGT_DATE" ]; then
+            log "DAILY-SKIP — Summary already sent today ($SGT_DATE)."
+            exit 0
+        fi
     fi
 else
     # Alert mode: only run inside the window 21:00 → 04:30 (crosses midnight)
@@ -343,7 +355,10 @@ EOF
 
     if send_telegram "$MESSAGE"; then
         log "DAILY-SENT — Daily summary delivered successfully"
-        echo "$SGT_DATE" > "$DAILY_STATE_FILE"
+        # A --test send doesn't count as today's summary
+        if [ "$FORCE_TEST" = false ]; then
+            echo "$SGT_DATE" > "$DAILY_STATE_FILE"
+        fi
     fi
 
     exit 0

@@ -288,7 +288,12 @@ tail -f ~/logs/fear_greed.log
 # Check LaunchAgent status (should list both agents)
 launchctl list | grep fear-greed
 
-# Send the daily summary manually (respects the once-per-day guard)
+# Test the daily summary right now (ignores the send-time gate and the
+# once-per-day guard, and does NOT count as today's send)
+bash fear_greed_monitor.sh --daily --test
+
+# Trigger the daily summary manually (respects the gates — only sends
+# after 21:35 SGT and at most once per day)
 bash fear_greed_monitor.sh --daily
 
 # Pause monitoring (both agents)
