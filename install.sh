@@ -8,7 +8,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLIST_NAME="com.eightday.fear-greed-monitor.plist"
-PLIST_SRC="$SCRIPT_DIR/$PLIST_NAME"
+DAILY_PLIST_NAME="com.eightday.fear-greed-daily.plist"
 LAUNCH_AGENTS="$HOME/Library/LaunchAgents"
 
 echo ""
@@ -84,6 +84,7 @@ echo "   ✅ Script is executable"
 # ─── 4. Test API connectivity ──────────────────────────────
 echo ""
 echo "🌐 Testing API connectivity..."
+API_URL="https://feargreedchart.com/api/?action=all"
 TEST_SCORE=$(curl -s --max-time 10 "$API_URL" 2>/dev/null | jq -r '.score.score // empty' 2>/dev/null || true)
 
 if [ -n "$TEST_SCORE" ]; then
@@ -92,38 +93,43 @@ else
     echo "   ⚠️  API unreachable (may be temporarily down). Script will retry on each run."
 fi
 
-# ─── 5. Install LaunchAgent ────────────────────────────────
+# ─── 5. Install LaunchAgents ───────────────────────────────
 echo ""
-echo "⏰ Installing LaunchAgent..."
+echo "⏰ Installing LaunchAgents..."
 
 mkdir -p "$LAUNCH_AGENTS"
 
-# Unload existing if present
-launchctl unload "$LAUNCH_AGENTS/$PLIST_NAME" 2>/dev/null || true
-
-# Generate plist with correct absolute path
 SCRIPT_PATH="$SCRIPT_DIR/fear_greed_monitor.sh"
 
-sed "s|/PATH/TO/fear-greed-monitor/fear_greed_monitor.sh|$SCRIPT_PATH|g" \
-    "$PLIST_SRC" > "$LAUNCH_AGENTS/$PLIST_NAME"
+for PLIST in "$PLIST_NAME" "$DAILY_PLIST_NAME"; do
+    # Unload existing if present
+    launchctl unload "$LAUNCH_AGENTS/$PLIST" 2>/dev/null || true
 
-launchctl load -w "$LAUNCH_AGENTS/$PLIST_NAME"
-echo "   ✅ LaunchAgent loaded: $PLIST_NAME"
+    # Generate plist with correct absolute path
+    sed "s|/PATH/TO/fear-greed-monitor/fear_greed_monitor.sh|$SCRIPT_PATH|g" \
+        "$SCRIPT_DIR/$PLIST" > "$LAUNCH_AGENTS/$PLIST"
+
+    launchctl load -w "$LAUNCH_AGENTS/$PLIST"
+    echo "   ✅ LaunchAgent loaded: $PLIST"
+done
 
 # ─── 6. Summary ────────────────────────────────────────────
 echo ""
 echo "============================================="
 echo "✅ Installation complete!"
 echo ""
-echo "   Schedule:    Every 30 minutes"
-echo "   Window:      9:00 PM – 4:30 AM SGT"
-echo "   Threshold:   Score < ${FGI_THRESHOLD:-10} (Extreme Fear)"
+echo "   Alert mode:  Every 30 min, 9:00 PM – 4:30 AM SGT, score < ${FGI_THRESHOLD:-10}"
+echo "   Daily mode:  Every day at ${FGI_DAILY_HOUR:-21}:$(printf '%02d' "${FGI_DAILY_MIN:-35}") SGT, regardless of score"
+echo "   Auto-start:  Both agents reload and run at every boot/login"
 echo "   Alert:       Telegram push notification"
 echo "   Logs:        ${FGI_LOG_FILE:-$HOME/logs/fear_greed.log}"
 echo ""
 echo "   Commands:"
-echo "   • Test now:   bash $SCRIPT_DIR/fear_greed_monitor.sh"
+echo "   • Test alert: bash $SCRIPT_DIR/fear_greed_monitor.sh"
+echo "   • Test daily: bash $SCRIPT_DIR/fear_greed_monitor.sh --daily --test"
 echo "   • View logs:  tail -20 ${FGI_LOG_FILE:-$HOME/logs/fear_greed.log}"
 echo "   • Pause:      launchctl unload ~/Library/LaunchAgents/$PLIST_NAME"
+echo "                 launchctl unload ~/Library/LaunchAgents/$DAILY_PLIST_NAME"
 echo "   • Resume:     launchctl load -w ~/Library/LaunchAgents/$PLIST_NAME"
+echo "                 launchctl load -w ~/Library/LaunchAgents/$DAILY_PLIST_NAME"
 echo ""

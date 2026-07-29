@@ -3,22 +3,30 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.eightday.fear-greed-monitor</string>
+    <string>com.eightday.fear-greed-daily</string>
 
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
         <!-- Update this path to match your installation directory -->
         <string>/PATH/TO/fear-greed-monitor/fear_greed_monitor.sh</string>
+        <string>--daily</string>
     </array>
 
-    <!-- Run every 30 minutes (1800 seconds) -->
-    <key>StartInterval</key>
-    <integer>1800</integer>
+    <!-- Fire daily at 9:35 PM (system local time — keep the Mac on SGT).
+         If the Mac is asleep at 21:35, launchd runs the job on wake. -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>21</integer>
+        <key>Minute</key>
+        <integer>35</integer>
+    </dict>
 
-    <!-- Run once whenever the agent is (re)loaded — i.e. on every
-         boot/login — so monitoring restarts automatically after the
-         machine is powered back on. -->
+    <!-- Also run once whenever the agent is (re)loaded — i.e. on every
+         boot/login — so a 9:35 send missed while the machine was powered
+         off is caught up. The script's once-per-day guard prevents
+         duplicate sends. -->
     <key>RunAtLoad</key>
     <true/>
 
@@ -33,9 +41,9 @@
 
     <!-- Logging -->
     <key>StandardOutPath</key>
-    <string>/tmp/fear_greed_launchd.log</string>
+    <string>/tmp/fear_greed_daily_launchd.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/fear_greed_launchd_err.log</string>
+    <string>/tmp/fear_greed_daily_launchd_err.log</string>
 
     <key>KeepAlive</key>
     <false/>

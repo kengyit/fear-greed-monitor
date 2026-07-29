@@ -20,7 +20,9 @@
 
 ## Overview
 
-A lightweight, self-hosted market sentiment monitoring system that tracks the **CNN Fear & Greed Index** and pushes real-time Telegram alerts when the index enters **Extreme Fear** territory (score < 10).
+A lightweight, self-hosted market sentiment monitoring system that tracks the **CNN Fear & Greed Index** and pushes real-time Telegram alerts when the index enters **Extreme Fear** territory (score < 10). It also delivers a **daily summary at 9:35 PM SGT** — every day, regardless of the score — timed just after the US market opens.
+
+Both schedules survive reboots: the LaunchAgents reload automatically whenever the machine is started again and run an immediate catch-up check. If the machine was off at 21:35, the daily summary is sent as soon as it's next started that day — once per day, never duplicated.
 
 Built to run autonomously on a Mac Mini as part of a personal AI command centre, this project demonstrates practical data engineering: API data extraction, time-windowed scheduling, structured alerting, and fault-tolerant automation — all in a single zero-dependency shell script.
 
@@ -34,7 +36,9 @@ The Fear & Greed Index is a composite of 5 market indicators that captures inves
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  macOS LaunchAgent (every 30 min)                           │
+│  macOS LaunchAgents (auto-reload + run on every boot/login) │
+│                                                             │
+│  ① ALERT AGENT — every 30 min                               │
 │  └── fear_greed_monitor.sh                                  │
 │        │                                                    │
 │        ├── 1. TIME GATE                                     │
@@ -43,7 +47,8 @@ The Fear & Greed Index is a composite of 5 market indicators that captures inves
 │        │       → Skip + log if outside window               │
 │        │                                                    │
 │        ├── 2. DATA EXTRACTION                               │
-│        │   └── GET feargreedchart.com/api/?action=all       │
+│        │   └── GET CNN F&G API (official gauge data);       │
+│        │       falls back to feargreedchart.com mirror      │
 │        │       → Parse composite score via jq               │
 │        │       → Extract 5 component scores + weights       │
 │        │                                                    │
@@ -60,6 +65,24 @@ The Fear & Greed Index is a composite of 5 market indicators that captures inves
 │            └── Append structured log to ~/logs/             │
 │                → Every run logged: SKIP | FETCH | SCORE |   │
 │                   ALERT | SENT | ERROR                      │
+│                                                             │
+│  ② DAILY AGENT — every day at 9:35 PM SGT                   │
+│  └── fear_greed_monitor.sh --daily                          │
+│        │                                                    │
+│        ├── 1. ONCE-PER-DAY GATE                             │
+│        │   └── Skip if before 21:35 SGT or already sent     │
+│        │       today (state file survives reboots)          │
+│        │                                                    │
+│        ├── 2. DATA EXTRACTION                               │
+│        │   └── F&G score (same pipeline as above), plus:    │
+│        │       S&P500 / Nasdaq / HSI / BTC (Yahoo Finance), │
+│        │       US Fed rate, CPI YoY, unemployment (FRED),   │
+│        │       top-3 headlines (CNBC RSS) — all best-effort │
+│        │                                                    │
+│        └── 3. UNCONDITIONAL DELIVERY                        │
+│            └── Telegram summary sent regardless of score    │
+│                → RunAtLoad catches up a send missed while   │
+│                   the machine was powered off               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -90,7 +113,41 @@ Each component scores 0–100. The weighted composite produces the final index v
 
 ---
 
-## Sample Telegram Alert
+## Sample Telegram Messages
+
+Every day at 9:35 PM SGT, regardless of the score:
+
+```
+📊 Daily Fear & Greed Update
+
+📈 Fear & Greed Index: 33 (Fear)
+📅 2026-07-29, 21:35 SGT
+
+📉 Index:
+  • S&P500: 6,365 (🔴 -0.3%)
+  • Nasdaq: 21,098 (🟢 +0.2%)
+  • HSI: 25,524 (🟢 +0.7%)
+  • Bitcoin: 118,024 (🔴 -1.2%)
+  • Interest Rate: 4.25% (last: 4.33% (as of 1/6/2026))
+  • CPI: 2.6% (last: 2.4% (as of 1/6/2026))
+  • Unemployment Rate: 4.2% (last: 4.1% (as of 1/6/2026))
+  • Top 3 breaking news:
+      • China unveils new chip breakthrough, rattling US tech stocks (29/7/2026 21:12 SGT)
+      • Fed holds rates steady as inflation cools & markets rally (29/7/2026 18:05 SGT)
+      • Bitcoin slips below $120K after record ETF inflows pause (29/7/2026 06:47 SGT)
+```
+
+Market data sources (all free, no API keys): index and Bitcoin quotes from
+Yahoo Finance (price + day-over-day change). Interest Rate, CPI, and
+Unemployment Rate are **United States monthly series** from FRED public CSVs —
+Effective Federal Funds Rate (`FEDFUNDS`), CPI year-over-year computed from
+`CPIAUCSL`, and civilian unemployment rate (`UNRATE`) — each shown as the
+latest monthly value with the previous month's reading and its as-of date.
+Headlines come from the CNBC Top News RSS feed, each with its publish
+datetime converted to SGT. The Fear & Greed score itself comes from CNN's
+official API — the same number as the gauge on cnn.com — with the
+feargreedchart.com mirror as fallback. Every line is best-effort —
+if a source is down it shows `n/a` and the summary is still delivered.
 
 When the index drops below the threshold, the bot delivers this message:
 
@@ -101,15 +158,17 @@ When the index drops below the threshold, the bot delivers this message:
 🕐 Checked at: 22:30 SGT
 
 📉 Component Breakdown:
-  • Market Volatility (VIX): 5/100 (wt: 25%)
-  • Market Momentum: 9/100 (wt: 25%)
-  • Put/Call Ratio: 8/100 (wt: 20%)
-  • Safe Haven Demand: 6/100 (wt: 15%)
-  • Junk Bond Appetite: 11/100 (wt: 15%)
+  • Market Momentum (S&P500): 5/100 (extreme fear)
+  • Stock Price Strength: 9/100 (extreme fear)
+  • Stock Price Breadth: 8/100 (extreme fear)
+  • Put/Call Options: 6/100 (extreme fear)
+  • Market Volatility (VIX): 4/100 (extreme fear)
+  • Junk Bond Demand: 11/100 (extreme fear)
+  • Safe Haven Demand: 7/100 (extreme fear)
 
 ⚠️ Index is below 10 — market in extreme fear territory.
 
-Source: feargreedchart.com
+Source: CNN
 ```
 
 ---
@@ -166,8 +225,16 @@ All parameters are at the top of `fear_greed_monitor.sh`:
 | `WINDOW_START` | `21` | Monitoring window start (SGT, 24h format) |
 | `WINDOW_END_HOUR` | `4` | Monitoring window end hour (SGT) |
 | `WINDOW_END_MIN` | `30` | Monitoring window end minute (SGT) |
+| `DAILY_HOUR` | `9` | Daily summary send hour (SGT) |
+| `DAILY_MIN` | `35` | Daily summary send minute (SGT) |
+| `DAILY_STATE_FILE` | `~/.fear_greed_daily_last_sent` | Once-per-day marker (reboot-safe) |
 | `COOLDOWN_MINUTES` | `120` | Minimum gap between consecutive alerts |
 | `LOG_FILE` | `~/logs/fear_greed.log` | Log file location |
+
+> **Note on the daily schedule:** the daily agent's `StartCalendarInterval` fires
+> at 21:35 in the Mac's *system* timezone — keep the machine on `Asia/Singapore`.
+> The script itself always evaluates its gates in SGT, so a mis-set system clock
+> can delay the summary but never duplicate it.
 
 ---
 
@@ -176,8 +243,9 @@ All parameters are at the top of `fear_greed_monitor.sh`:
 ```
 fear-greed-monitor/
 ├── README.md                                  # This file
-├── fear_greed_monitor.sh                      # Core monitoring script
-├── com.eightday.fear-greed-monitor.plist       # macOS LaunchAgent (cron)
+├── fear_greed_monitor.sh                      # Core monitoring script (alert + daily modes)
+├── com.eightday.fear-greed-monitor.plist       # LaunchAgent: alert mode, every 30 min
+├── com.eightday.fear-greed-daily.plist         # LaunchAgent: daily summary at 21:35 SGT
 ├── install.sh                                 # One-command installer
 ├── SKILL.md                                   # OpenClaw skill definition
 ├── .env.example                               # Template for credentials
@@ -223,14 +291,24 @@ tail -20 ~/logs/fear_greed.log
 # Live-follow logs
 tail -f ~/logs/fear_greed.log
 
-# Check LaunchAgent status
+# Check LaunchAgent status (should list both agents)
 launchctl list | grep fear-greed
 
-# Pause monitoring
-launchctl unload ~/Library/LaunchAgents/com.eightday.fear-greed-monitor.plist
+# Test the daily summary right now (ignores the send-time gate and the
+# once-per-day guard, and does NOT count as today's send)
+bash fear_greed_monitor.sh --daily --test
 
-# Resume monitoring
+# Trigger the daily summary manually (respects the gates — only sends
+# after 21:35 SGT and at most once per day)
+bash fear_greed_monitor.sh --daily
+
+# Pause monitoring (both agents)
+launchctl unload ~/Library/LaunchAgents/com.eightday.fear-greed-monitor.plist
+launchctl unload ~/Library/LaunchAgents/com.eightday.fear-greed-daily.plist
+
+# Resume monitoring (both agents)
 launchctl load -w ~/Library/LaunchAgents/com.eightday.fear-greed-monitor.plist
+launchctl load -w ~/Library/LaunchAgents/com.eightday.fear-greed-daily.plist
 
 # Check current Fear & Greed score
 curl -s "https://feargreedchart.com/api/?action=all" | jq '.score.score'
@@ -250,14 +328,16 @@ curl -s "https://feargreedchart.com/api/?action=all" | jq '.score.score'
 
 **Why 2-hour cooldown?** The Fear & Greed Index updates once per trading day, not intraday. Without a cooldown, a score of 8 would trigger alerts every 30 minutes for 7.5 hours. The cooldown ensures one alert per significant reading.
 
+**Why `RunAtLoad` + a state file for the daily summary?** `StartCalendarInterval` catches up missed runs after *sleep*, but not after a *shutdown*. `RunAtLoad` fires the daily agent on every boot/login, and the script's gate (send only at/after 21:35 SGT, only once per day) turns that into safe catch-up behavior. The marker lives in `$HOME` — not `/tmp`, which macOS wipes on reboot — so a restart can never cause a duplicate send.
+
 ---
 
 ## Roadmap
 
 - [ ] **Google Sheets logging** — append each score to a spreadsheet for historical trend analysis
 - [ ] **Multi-threshold tiers** — separate alerts for < 20 (Fear), < 10 (Extreme Fear), < 5 (Capitulation)
+- [x] **Daily digest** — daily Telegram summary at 9:35 PM SGT regardless of score
 - [ ] **Crypto F&G support** — add alternative.me crypto Fear & Greed as a parallel monitor
-- [ ] **Daily digest** — summary Telegram message at market close with day's score + trend
 - [ ] **Grafana dashboard** — time-series visualization of historical scores
 - [ ] **Linux/Docker support** — systemd timer + containerised version for cloud deployment
 
