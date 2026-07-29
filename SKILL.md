@@ -47,7 +47,11 @@ LaunchAgent ② daily (9:35 PM daily, RunAtLoad on boot/login)
   └── fear_greed_monitor.sh --daily
         ├── Skip if before 21:35 SGT or already sent today
         │   (marker: ~/.fear_greed_daily_last_sent — reboot-safe)
-        ├── GET + parse (same pipeline)
+        ├── GET + parse F&G score (same pipeline)
+        ├── Fetch market snapshot (all best-effort, "n/a" on failure):
+        │   S&P500 / Nasdaq / HSI / Bitcoin — Yahoo Finance
+        │   Fed funds rate + CPI YoY — FRED public CSV (no key)
+        │   Top-3 headlines — CNBC Top News RSS
         ├── POST Telegram daily summary (unconditional on score)
         └── Log result to ~/logs/fear_greed.log
 ```
@@ -81,7 +85,28 @@ All config is at the top of `fear_greed_monitor.sh`:
 - `com.eightday.fear-greed-daily.plist` — LaunchAgent: daily summary at 21:35 SGT
 - `install.sh` — one-command installer (installs both agents)
 
-## Telegram Alert Format
+## Telegram Daily Summary Format (21:35 SGT, unconditional)
+
+```
+📊 Daily Fear & Greed Update
+
+📈 Fear & Greed Index: 42 (Neutral)
+📅 2026-07-29, 21:35 SGT
+
+📉 Index:
+  • S&P500: 6,365 (down: 0.3%)
+  • Nasdaq: 21,098 (up: 0.2%)
+  • HSI: 25,524 (up: 0.7%)
+  • Bitcoin: 118,024 (down: 1.2%)
+  • Interest Rate: 4.25% (last: 4.33% (as of 1/6/2026))
+  • CPI: 2.6% (last: 2.4% (as of 1/6/2026))
+  • Top 3 breaking news:
+      • China unveils new chip breakthrough, rattling US tech stocks
+      • Fed holds rates steady as inflation cools & markets rally
+      • Bitcoin slips below $120K after record ETF inflows pause
+```
+
+## Telegram Alert Format (score < 10 only)
 
 ```
 🚨 EXTREME FEAR ALERT 🚨

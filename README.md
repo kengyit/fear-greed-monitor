@@ -72,7 +72,11 @@ The Fear & Greed Index is a composite of 5 market indicators that captures inves
 │        │   └── Skip if before 21:35 SGT or already sent     │
 │        │       today (state file survives reboots)          │
 │        │                                                    │
-│        ├── 2. DATA EXTRACTION (same pipeline as above)      │
+│        ├── 2. DATA EXTRACTION                               │
+│        │   └── F&G score (same pipeline as above), plus:    │
+│        │       S&P500 / Nasdaq / HSI / BTC (Yahoo Finance), │
+│        │       Fed funds rate + CPI YoY (FRED CSV),         │
+│        │       top-3 headlines (CNBC RSS) — all best-effort │
 │        │                                                    │
 │        └── 3. UNCONDITIONAL DELIVERY                        │
 │            └── Telegram summary sent regardless of score    │
@@ -118,15 +122,24 @@ Every day at 9:35 PM SGT, regardless of the score:
 📈 Fear & Greed Index: 42 (Neutral)
 📅 2026-07-29, 21:35 SGT
 
-📉 Component Breakdown:
-  • Market Volatility (VIX): 38/100 (wt: 25%)
-  • Market Momentum: 45/100 (wt: 25%)
-  • Put/Call Ratio: 40/100 (wt: 20%)
-  • Safe Haven Demand: 44/100 (wt: 15%)
-  • Junk Bond Appetite: 43/100 (wt: 15%)
-
-Source: feargreedchart.com
+📉 Index:
+  • S&P500: 6,365 (down: 0.3%)
+  • Nasdaq: 21,098 (up: 0.2%)
+  • HSI: 25,524 (up: 0.7%)
+  • Bitcoin: 118,024 (down: 1.2%)
+  • Interest Rate: 4.25% (last: 4.33% (as of 1/6/2026))
+  • CPI: 2.6% (last: 2.4% (as of 1/6/2026))
+  • Top 3 breaking news:
+      • China unveils new chip breakthrough, rattling US tech stocks
+      • Fed holds rates steady as inflation cools & markets rally
+      • Bitcoin slips below $120K after record ETF inflows pause
 ```
+
+Market data sources (all free, no API keys): index and Bitcoin quotes from
+Yahoo Finance (price + day-over-day change), Effective Federal Funds Rate and
+CPI year-over-year from FRED public CSVs, headlines from the CNBC Top News RSS
+feed. Every line is best-effort — if a source is down it shows `n/a` and the
+summary is still delivered.
 
 When the index drops below the threshold, the bot delivers this message:
 

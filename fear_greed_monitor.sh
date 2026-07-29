@@ -100,6 +100,94 @@ send_telegram() {
     fi
 }
 
+# ─── MARKET SNAPSHOT HELPERS (daily mode) ───────────────────
+# Each helper is best-effort: on any fetch/parse failure it prints
+# an "n/a" line so the daily summary still goes out.
+
+add_commas() {
+    # 7400.12 → 7,400 (rounds to whole number, adds thousands separators)
+    printf "%.0f" "$1" | rev | sed 's/[0-9]\{3\}/&,/g' | rev | sed 's/^,//'
+}
+
+yahoo_line() {
+    # $1 = display name, $2 = URL-encoded Yahoo symbol
+    # Prints: "  • S&P500: 6,364 (down: 0.3%)"
+    local json price prev pct dir
+    json=$(curl -s --max-time 10 -H "User-Agent: Mozilla/5.0" \
+        "https://query1.finance.yahoo.com/v8/finance/chart/${2}?interval=1d&range=5d" 2>/dev/null) || json=""
+    price=$(echo "$json" | jq -r '.chart.result[0].meta.regularMarketPrice // empty' 2>/dev/null) || price=""
+    prev=$(echo "$json" | jq -r '.chart.result[0].meta.chartPreviousClose // .chart.result[0].meta.previousClose // empty' 2>/dev/null) || prev=""
+    if [ -z "$price" ] || [ -z "$prev" ]; then
+        echo "  • ${1}: n/a"
+        return 0
+    fi
+    pct=$(awk -v p="$price" -v q="$prev" 'BEGIN { printf "%.1f", (p - q) / q * 100 }')
+    case "$pct" in
+        -*) dir="down"; pct="${pct#-}" ;;
+        *)  dir="up" ;;
+    esac
+    echo "  • ${1}: $(add_commas "$price") (${dir}: ${pct}%)"
+}
+
+fred_date_fmt() {
+    # 2026-06-01 → 1/6/2026
+    awk -v d="$1" 'BEGIN { split(d, a, "-"); printf "%d/%d/%s", a[3] + 0, a[2] + 0, a[1] }'
+}
+
+rate_line() {
+    # Effective Federal Funds Rate (FRED FEDFUNDS, monthly, no API key)
+    # Prints: "  • Interest Rate: 4.33% (last: 4.33% (as of 1/6/2026))"
+    local csv rows cur last lastd
+    csv=$(curl -s --max-time 10 "https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS" 2>/dev/null) || csv=""
+    rows=$(echo "$csv" | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2},[0-9.]+$' | tail -2) || rows=""
+    if [ "$(echo "$rows" | grep -c '^[0-9]')" -ne 2 ]; then
+        echo "  • Interest Rate: n/a"
+        return 0
+    fi
+    lastd=$(echo "$rows" | head -1 | cut -d, -f1)
+    last=$(echo "$rows" | head -1 | cut -d, -f2)
+    cur=$(echo "$rows" | tail -1 | cut -d, -f2)
+    echo "  • Interest Rate: ${cur}% (last: ${last}% (as of $(fred_date_fmt "$lastd")))"
+}
+
+cpi_line() {
+    # CPI year-over-year inflation, computed from the FRED CPIAUCSL index
+    # Prints: "  • CPI: 2.7% (last: 2.4% (as of 1/6/2026))"
+    local csv result cur curd last lastd
+    csv=$(curl -s --max-time 10 "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL" 2>/dev/null) || csv=""
+    result=$(echo "$csv" | awk -F, '
+        /^[0-9][0-9][0-9][0-9]-/ && $2 ~ /^[0-9.]+$/ { d[n] = $1; v[n] = $2; n++ }
+        END {
+            if (n < 14) exit 1
+            printf "%.1f|%.1f|%s", (v[n-1] / v[n-13] - 1) * 100, (v[n-2] / v[n-14] - 1) * 100, d[n-2]
+        }') || result=""
+    if [ -z "$result" ]; then
+        echo "  • CPI: n/a"
+        return 0
+    fi
+    cur=$(echo "$result" | cut -d'|' -f1)
+    last=$(echo "$result" | cut -d'|' -f2)
+    lastd=$(echo "$result" | cut -d'|' -f3)
+    echo "  • CPI: ${cur}% (last: ${last}% (as of $(fred_date_fmt "$lastd")))"
+}
+
+news_lines() {
+    # Top 3 headlines from the CNBC Top News RSS feed
+    local rss titles
+    rss=$(curl -s --max-time 10 -H "User-Agent: Mozilla/5.0" \
+        "https://www.cnbc.com/id/100003114/device/rss/rss.html" 2>/dev/null) || rss=""
+    # Flatten, strip CDATA, pull <title> tags; first title is the channel name
+    titles=$(echo "$rss" | tr -d '\r\n' | sed 's/<!\[CDATA\[//g; s/\]\]>//g' \
+        | grep -o '<title>[^<]*</title>' | sed 's/<\/*title>//g' \
+        | sed "s/&amp;/\&/g; s/&#039;/'/g; s/&quot;/\"/g; s/&apos;/'/g" \
+        | tail -n +2 | head -3) || titles=""
+    if [ -z "$titles" ]; then
+        echo "      • (news unavailable)"
+        return 0
+    fi
+    echo "$titles" | sed 's/^/      • /'
+}
+
 # ─── MODE GATES ─────────────────────────────────────────────
 
 if [ "$MODE" = "daily" ]; then
@@ -224,6 +312,19 @@ log "SCORE — $SCORE ($LABEL) | Threshold: <$THRESHOLD"
 # ─── DAILY SUMMARY (daily mode) ────────────────────────────
 
 if [ "$MODE" = "daily" ]; then
+    log "DAILY — Building market snapshot for $SGT_DATE."
+
+    SNAPSHOT=$(
+        yahoo_line "S&P500" "%5EGSPC"
+        yahoo_line "Nasdaq" "%5EIXIC"
+        yahoo_line "HSI" "%5EHSI"
+        yahoo_line "Bitcoin" "BTC-USD"
+        rate_line
+        cpi_line
+        echo "  • Top 3 breaking news:"
+        news_lines
+    )
+
     log "DAILY — Sending daily summary for $SGT_DATE."
 
     MESSAGE=$(cat <<EOF
@@ -232,9 +333,8 @@ if [ "$MODE" = "daily" ]; then
 📈 Fear & Greed Index: ${SCORE} (${LABEL})
 📅 ${SGT_DATE}, ${SGT_TIME}
 
-📉 Component Breakdown:
-${BREAKDOWN_FLAT}
-Source: feargreedchart.com
+📉 Index:
+${SNAPSHOT}
 EOF
 )
 
