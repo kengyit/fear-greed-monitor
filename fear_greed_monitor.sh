@@ -134,24 +134,26 @@ fred_date_fmt() {
     awk -v d="$1" 'BEGIN { split(d, a, "-"); printf "%d/%d/%s", a[3] + 0, a[2] + 0, a[1] }'
 }
 
-rate_line() {
-    # Effective Federal Funds Rate (FRED FEDFUNDS, monthly, no API key)
-    # Prints: "  • Interest Rate: 4.33% (last: 4.33% (as of 1/6/2026))"
+fred_line() {
+    # $1 = display name, $2 = FRED series ID (US data, monthly, no API key)
+    # Shows the latest monthly value and the previous month's reading:
+    # "  • Interest Rate: 4.33% (last: 4.33% (as of 1/6/2026))"
     local csv rows cur last lastd
-    csv=$(curl -s --max-time 10 "https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS" 2>/dev/null) || csv=""
+    csv=$(curl -s --max-time 10 "https://fred.stlouisfed.org/graph/fredgraph.csv?id=${2}" 2>/dev/null) || csv=""
     rows=$(echo "$csv" | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2},[0-9.]+$' | tail -2) || rows=""
     if [ "$(echo "$rows" | grep -c '^[0-9]')" -ne 2 ]; then
-        echo "  • Interest Rate: n/a"
+        echo "  • ${1}: n/a"
         return 0
     fi
     lastd=$(echo "$rows" | head -1 | cut -d, -f1)
     last=$(echo "$rows" | head -1 | cut -d, -f2)
     cur=$(echo "$rows" | tail -1 | cut -d, -f2)
-    echo "  • Interest Rate: ${cur}% (last: ${last}% (as of $(fred_date_fmt "$lastd")))"
+    echo "  • ${1}: ${cur}% (last: ${last}% (as of $(fred_date_fmt "$lastd")))"
 }
 
 cpi_line() {
-    # CPI year-over-year inflation, computed from the FRED CPIAUCSL index
+    # US CPI year-over-year inflation, computed from the monthly FRED
+    # CPIAUCSL index (US city average, all items)
     # Prints: "  • CPI: 2.7% (last: 2.4% (as of 1/6/2026))"
     local csv result cur curd last lastd
     csv=$(curl -s --max-time 10 "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL" 2>/dev/null) || csv=""
@@ -319,8 +321,9 @@ if [ "$MODE" = "daily" ]; then
         yahoo_line "Nasdaq" "%5EIXIC"
         yahoo_line "HSI" "%5EHSI"
         yahoo_line "Bitcoin" "BTC-USD"
-        rate_line
-        cpi_line
+        fred_line "Interest Rate" "FEDFUNDS"   # US Effective Federal Funds Rate, monthly
+        cpi_line                               # US CPI YoY, monthly
+        fred_line "Unemployment Rate" "UNRATE" # US civilian unemployment rate, monthly
         echo "  • Top 3 breaking news:"
         news_lines
     )

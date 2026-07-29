@@ -75,7 +75,7 @@ The Fear & Greed Index is a composite of 5 market indicators that captures inves
 │        ├── 2. DATA EXTRACTION                               │
 │        │   └── F&G score (same pipeline as above), plus:    │
 │        │       S&P500 / Nasdaq / HSI / BTC (Yahoo Finance), │
-│        │       Fed funds rate + CPI YoY (FRED CSV),         │
+│        │       US Fed rate, CPI YoY, unemployment (FRED),   │
 │        │       top-3 headlines (CNBC RSS) — all best-effort │
 │        │                                                    │
 │        └── 3. UNCONDITIONAL DELIVERY                        │
@@ -129,6 +129,7 @@ Every day at 9:35 PM SGT, regardless of the score:
   • Bitcoin: 118,024 (down: 1.2%)
   • Interest Rate: 4.25% (last: 4.33% (as of 1/6/2026))
   • CPI: 2.6% (last: 2.4% (as of 1/6/2026))
+  • Unemployment Rate: 4.2% (last: 4.1% (as of 1/6/2026))
   • Top 3 breaking news:
       • China unveils new chip breakthrough, rattling US tech stocks
       • Fed holds rates steady as inflation cools & markets rally
@@ -136,10 +137,13 @@ Every day at 9:35 PM SGT, regardless of the score:
 ```
 
 Market data sources (all free, no API keys): index and Bitcoin quotes from
-Yahoo Finance (price + day-over-day change), Effective Federal Funds Rate and
-CPI year-over-year from FRED public CSVs, headlines from the CNBC Top News RSS
-feed. Every line is best-effort — if a source is down it shows `n/a` and the
-summary is still delivered.
+Yahoo Finance (price + day-over-day change). Interest Rate, CPI, and
+Unemployment Rate are **United States monthly series** from FRED public CSVs —
+Effective Federal Funds Rate (`FEDFUNDS`), CPI year-over-year computed from
+`CPIAUCSL`, and civilian unemployment rate (`UNRATE`) — each shown as the
+latest monthly value with the previous month's reading and its as-of date.
+Headlines come from the CNBC Top News RSS feed. Every line is best-effort —
+if a source is down it shows `n/a` and the summary is still delivered.
 
 When the index drops below the threshold, the bot delivers this message:
 

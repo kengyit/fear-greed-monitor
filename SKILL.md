@@ -50,7 +50,8 @@ LaunchAgent ② daily (9:35 PM daily, RunAtLoad on boot/login)
         ├── GET + parse F&G score (same pipeline)
         ├── Fetch market snapshot (all best-effort, "n/a" on failure):
         │   S&P500 / Nasdaq / HSI / Bitcoin — Yahoo Finance
-        │   Fed funds rate + CPI YoY — FRED public CSV (no key)
+        │   US Fed rate, CPI YoY, unemployment — FRED CSV (no key,
+        │   all United States monthly series)
         │   Top-3 headlines — CNBC Top News RSS
         ├── POST Telegram daily summary (unconditional on score)
         └── Log result to ~/logs/fear_greed.log
@@ -100,6 +101,7 @@ All config is at the top of `fear_greed_monitor.sh`:
   • Bitcoin: 118,024 (down: 1.2%)
   • Interest Rate: 4.25% (last: 4.33% (as of 1/6/2026))
   • CPI: 2.6% (last: 2.4% (as of 1/6/2026))
+  • Unemployment Rate: 4.2% (last: 4.1% (as of 1/6/2026))
   • Top 3 breaking news:
       • China unveils new chip breakthrough, rattling US tech stocks
       • Fed holds rates steady as inflation cools & markets rally
