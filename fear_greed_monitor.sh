@@ -1,16 +1,30 @@
 #!/bin/bash
 # ============================================================
 # fear_greed_monitor.sh
-# 
+#
 # Automated stock market Fear & Greed Index monitor.
-# Checks the CNN/FearGreedChart composite index every 30 min
-# during US market hours (9PM–4:30AM SGT) and sends a 
-# Telegram alert when the score enters Extreme Fear (<10).
+#
+# Modes:
+#   (default)  Alert mode — checks the CNN/FearGreedChart composite
+#              index every 30 min during US market hours
+#              (9PM–4:30AM SGT) and sends a Telegram alert when the
+#              score enters Extreme Fear (<10).
+#   --daily    Daily mode — sends a Telegram summary of the current
+#              score every day at 9:35 PM SGT, regardless of value.
+#              Safe to re-run: only one summary is sent per day, and
+#              a missed run (machine was off) is caught up on boot.
 #
 # Part of the EightDay personal AI command centre.
 # ============================================================
 
 set -euo pipefail
+
+# ─── MODE ───────────────────────────────────────────────────
+
+MODE="alert"
+if [ "${1:-}" = "--daily" ]; then
+    MODE="daily"
+fi
 
 # ─── CONFIGURATION ──────────────────────────────────────────
 
@@ -28,10 +42,17 @@ TELEGRAM_CHAT_ID="${FGI_TELEGRAM_CHAT_ID:?Error: Set FGI_TELEGRAM_CHAT_ID in .en
 LOG_FILE="${FGI_LOG_FILE:-$HOME/logs/fear_greed.log}"
 API_URL="https://feargreedchart.com/api/?action=all"
 
-# Time window (SGT) — only run between 9PM and 4:30AM
+# Time window (SGT) — alert mode only runs between 9PM and 4:30AM
 WINDOW_START="${FGI_WINDOW_START:-21}"
 WINDOW_END_HOUR="${FGI_WINDOW_END_HOUR:-4}"
 WINDOW_END_MIN="${FGI_WINDOW_END_MIN:-30}"
+
+# Daily summary time (SGT) — daily mode sends at/after this time
+DAILY_HOUR="${FGI_DAILY_HOUR:-21}"
+DAILY_MIN="${FGI_DAILY_MIN:-35}"
+# Persistent state file so a reboot never causes a duplicate daily send
+# (deliberately NOT in /tmp — macOS clears /tmp on reboot)
+DAILY_STATE_FILE="${FGI_DAILY_STATE_FILE:-$HOME/.fear_greed_daily_last_sent}"
 
 # Cooldown: don't spam alerts within this many minutes
 COOLDOWN_MINUTES="${FGI_COOLDOWN_MINUTES:-120}"
@@ -44,29 +65,78 @@ TIMESTAMP=$(TZ="Asia/Singapore" date "+%Y-%m-%d %H:%M:%S SGT")
 SGT_HOUR=$(TZ="Asia/Singapore" date "+%-H")
 SGT_MIN=$(TZ="Asia/Singapore" date "+%-M")
 SGT_TIME=$(TZ="Asia/Singapore" date "+%H:%M SGT")
+SGT_DATE=$(TZ="Asia/Singapore" date "+%Y-%m-%d")
 
 log() {
     echo "[$TIMESTAMP] $1" >> "$LOG_FILE"
 }
 
-# ─── TIME WINDOW CHECK ─────────────────────────────────────
-# Window: 21:00 → 04:30 (crosses midnight)
-IN_WINDOW=false
+# ─── TELEGRAM SENDER ────────────────────────────────────────
+# send_telegram "message text" — returns 0 on delivery, 1 on failure
 
-if [ "$SGT_HOUR" -ge "$WINDOW_START" ]; then
-    IN_WINDOW=true
-elif [ "$SGT_HOUR" -lt "$WINDOW_END_HOUR" ]; then
-    IN_WINDOW=true
-elif [ "$SGT_HOUR" -eq "$WINDOW_END_HOUR" ] && [ "$SGT_MIN" -le "$WINDOW_END_MIN" ]; then
-    IN_WINDOW=true
+send_telegram() {
+    local message="$1"
+    local payload result ok err
+
+    # JSON payload for proper encoding of newlines, emoji, ampersands
+    payload=$(jq -n \
+        --arg chat_id "$TELEGRAM_CHAT_ID" \
+        --arg text "$message" \
+        '{chat_id: $chat_id, text: $text}')
+
+    result=$(curl -s --max-time 10 \
+        -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+        -H "Content-Type: application/json" \
+        -d "$payload" 2>&1)
+
+    ok=$(echo "$result" | jq -r '.ok // false' 2>/dev/null)
+
+    if [ "$ok" = "true" ]; then
+        return 0
+    else
+        err=$(echo "$result" | jq -r '.description // "Unknown error"' 2>/dev/null)
+        log "FAIL — Telegram send failed: $err"
+        return 1
+    fi
+}
+
+# ─── MODE GATES ─────────────────────────────────────────────
+
+if [ "$MODE" = "daily" ]; then
+    # Daily mode fires unconditionally at 9:35 SGT. The plist also runs
+    # this at load (boot/login), so gate on time-of-day and a once-per-day
+    # marker: send only at/after DAILY_HOUR:DAILY_MIN, and only once.
+    NOW_MINUTES=$(( SGT_HOUR * 60 + SGT_MIN ))
+    DAILY_MINUTES=$(( DAILY_HOUR * 60 + DAILY_MIN ))
+
+    if [ "$NOW_MINUTES" -lt "$DAILY_MINUTES" ]; then
+        log "DAILY-SKIP — $SGT_TIME is before daily send time (${DAILY_HOUR}:$(printf '%02d' "$DAILY_MIN") SGT)."
+        exit 0
+    fi
+
+    if [ -f "$DAILY_STATE_FILE" ] && [ "$(cat "$DAILY_STATE_FILE")" = "$SGT_DATE" ]; then
+        log "DAILY-SKIP — Summary already sent today ($SGT_DATE)."
+        exit 0
+    fi
+else
+    # Alert mode: only run inside the window 21:00 → 04:30 (crosses midnight)
+    IN_WINDOW=false
+
+    if [ "$SGT_HOUR" -ge "$WINDOW_START" ]; then
+        IN_WINDOW=true
+    elif [ "$SGT_HOUR" -lt "$WINDOW_END_HOUR" ]; then
+        IN_WINDOW=true
+    elif [ "$SGT_HOUR" -eq "$WINDOW_END_HOUR" ] && [ "$SGT_MIN" -le "$WINDOW_END_MIN" ]; then
+        IN_WINDOW=true
+    fi
+
+    if [ "$IN_WINDOW" = false ]; then
+        log "SKIP — Outside monitoring window ($SGT_TIME). Window: ${WINDOW_START}:00–${WINDOW_END_HOUR}:${WINDOW_END_MIN}"
+        exit 0
+    fi
 fi
 
-if [ "$IN_WINDOW" = false ]; then
-    log "SKIP — Outside monitoring window ($SGT_TIME). Window: ${WINDOW_START}:00–${WINDOW_END_HOUR}:${WINDOW_END_MIN}"
-    exit 0
-fi
-
-# ─── COOLDOWN CHECK ─────────────────────────────────────────
+# ─── COOLDOWN CHECK (alert mode) ────────────────────────────
 
 check_cooldown() {
     if [ -f "$COOLDOWN_FILE" ]; then
@@ -87,10 +157,12 @@ set_cooldown() {
 
 # ─── FETCH FEAR & GREED INDEX ──────────────────────────────
 
-log "FETCH — Calling API at $SGT_TIME"
+log "FETCH — Calling API at $SGT_TIME (mode: $MODE)"
 
-RESPONSE=$(curl -s --max-time 15 "$API_URL" 2>&1)
-CURL_EXIT=$?
+# `|| CURL_EXIT=$?` keeps set -e from killing the script before
+# the failure is logged
+CURL_EXIT=0
+RESPONSE=$(curl -s --max-time 15 "$API_URL" 2>&1) || CURL_EXIT=$?
 
 if [ $CURL_EXIT -ne 0 ] || [ -z "$RESPONSE" ]; then
     log "ERROR — API request failed (curl exit: $CURL_EXIT)"
@@ -145,9 +217,36 @@ else
     BREAKDOWN="  (Component breakdown not available)\n"
 fi
 
+BREAKDOWN_FLAT=$(echo -e "$BREAKDOWN")
+
 log "SCORE — $SCORE ($LABEL) | Threshold: <$THRESHOLD"
 
-# ─── THRESHOLD CHECK & ALERT ──────────────────────────────
+# ─── DAILY SUMMARY (daily mode) ────────────────────────────
+
+if [ "$MODE" = "daily" ]; then
+    log "DAILY — Sending daily summary for $SGT_DATE."
+
+    MESSAGE=$(cat <<EOF
+📊 Daily Fear & Greed Update
+
+📈 Fear & Greed Index: ${SCORE} (${LABEL})
+📅 ${SGT_DATE}, ${SGT_TIME}
+
+📉 Component Breakdown:
+${BREAKDOWN_FLAT}
+Source: feargreedchart.com
+EOF
+)
+
+    if send_telegram "$MESSAGE"; then
+        log "DAILY-SENT — Daily summary delivered successfully"
+        echo "$SGT_DATE" > "$DAILY_STATE_FILE"
+    fi
+
+    exit 0
+fi
+
+# ─── THRESHOLD CHECK & ALERT (alert mode) ──────────────────
 
 if [ "$SCORE" -lt "$THRESHOLD" ]; then
     if ! check_cooldown; then
@@ -155,8 +254,6 @@ if [ "$SCORE" -lt "$THRESHOLD" ]; then
     fi
 
     log "ALERT — Score $SCORE is below threshold $THRESHOLD. Sending Telegram alert."
-
-    BREAKDOWN_FLAT=$(echo -e "$BREAKDOWN")
 
     MESSAGE=$(cat <<EOF
 🚨 EXTREME FEAR ALERT 🚨
@@ -172,25 +269,9 @@ Source: feargreedchart.com
 EOF
 )
 
-    # Send via Telegram Bot API (JSON payload for proper encoding)
-    PAYLOAD=$(jq -n \
-        --arg chat_id "$TELEGRAM_CHAT_ID" \
-        --arg text "$MESSAGE" \
-        '{chat_id: $chat_id, text: $text}')
-
-    TELEGRAM_RESULT=$(curl -s --max-time 10 \
-        -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-        -H "Content-Type: application/json" \
-        -d "$PAYLOAD" 2>&1)
-
-    TG_OK=$(echo "$TELEGRAM_RESULT" | jq -r '.ok // false' 2>/dev/null)
-
-    if [ "$TG_OK" = "true" ]; then
+    if send_telegram "$MESSAGE"; then
         log "SENT — Telegram alert delivered successfully"
         set_cooldown
-    else
-        TG_ERR=$(echo "$TELEGRAM_RESULT" | jq -r '.description // "Unknown error"' 2>/dev/null)
-        log "FAIL — Telegram send failed: $TG_ERR"
     fi
 else
     log "OK — Score $SCORE is above threshold $THRESHOLD. No alert needed."

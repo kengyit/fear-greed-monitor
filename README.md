@@ -20,7 +20,9 @@
 
 ## Overview
 
-A lightweight, self-hosted market sentiment monitoring system that tracks the **CNN Fear & Greed Index** and pushes real-time Telegram alerts when the index enters **Extreme Fear** territory (score < 10).
+A lightweight, self-hosted market sentiment monitoring system that tracks the **CNN Fear & Greed Index** and pushes real-time Telegram alerts when the index enters **Extreme Fear** territory (score < 10). It also delivers a **daily summary at 9:35 PM SGT** — every day, regardless of the score — timed just after the US market opens.
+
+Both schedules survive reboots: the LaunchAgents reload automatically whenever the machine is started again and run an immediate catch-up check. If the machine was off at 21:35, the daily summary is sent as soon as it's next started that day — once per day, never duplicated.
 
 Built to run autonomously on a Mac Mini as part of a personal AI command centre, this project demonstrates practical data engineering: API data extraction, time-windowed scheduling, structured alerting, and fault-tolerant automation — all in a single zero-dependency shell script.
 
@@ -34,7 +36,9 @@ The Fear & Greed Index is a composite of 5 market indicators that captures inves
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  macOS LaunchAgent (every 30 min)                           │
+│  macOS LaunchAgents (auto-reload + run on every boot/login) │
+│                                                             │
+│  ① ALERT AGENT — every 30 min                               │
 │  └── fear_greed_monitor.sh                                  │
 │        │                                                    │
 │        ├── 1. TIME GATE                                     │
@@ -60,6 +64,20 @@ The Fear & Greed Index is a composite of 5 market indicators that captures inves
 │            └── Append structured log to ~/logs/             │
 │                → Every run logged: SKIP | FETCH | SCORE |   │
 │                   ALERT | SENT | ERROR                      │
+│                                                             │
+│  ② DAILY AGENT — every day at 9:35 PM SGT                   │
+│  └── fear_greed_monitor.sh --daily                          │
+│        │                                                    │
+│        ├── 1. ONCE-PER-DAY GATE                             │
+│        │   └── Skip if before 21:35 SGT or already sent     │
+│        │       today (state file survives reboots)          │
+│        │                                                    │
+│        ├── 2. DATA EXTRACTION (same pipeline as above)      │
+│        │                                                    │
+│        └── 3. UNCONDITIONAL DELIVERY                        │
+│            └── Telegram summary sent regardless of score    │
+│                → RunAtLoad catches up a send missed while   │
+│                   the machine was powered off               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -90,7 +108,25 @@ Each component scores 0–100. The weighted composite produces the final index v
 
 ---
 
-## Sample Telegram Alert
+## Sample Telegram Messages
+
+Every day at 9:35 PM SGT, regardless of the score:
+
+```
+📊 Daily Fear & Greed Update
+
+📈 Fear & Greed Index: 42 (Neutral)
+📅 2026-07-29, 21:35 SGT
+
+📉 Component Breakdown:
+  • Market Volatility (VIX): 38/100 (wt: 25%)
+  • Market Momentum: 45/100 (wt: 25%)
+  • Put/Call Ratio: 40/100 (wt: 20%)
+  • Safe Haven Demand: 44/100 (wt: 15%)
+  • Junk Bond Appetite: 43/100 (wt: 15%)
+
+Source: feargreedchart.com
+```
 
 When the index drops below the threshold, the bot delivers this message:
 
@@ -166,8 +202,16 @@ All parameters are at the top of `fear_greed_monitor.sh`:
 | `WINDOW_START` | `21` | Monitoring window start (SGT, 24h format) |
 | `WINDOW_END_HOUR` | `4` | Monitoring window end hour (SGT) |
 | `WINDOW_END_MIN` | `30` | Monitoring window end minute (SGT) |
+| `DAILY_HOUR` | `9` | Daily summary send hour (SGT) |
+| `DAILY_MIN` | `35` | Daily summary send minute (SGT) |
+| `DAILY_STATE_FILE` | `~/.fear_greed_daily_last_sent` | Once-per-day marker (reboot-safe) |
 | `COOLDOWN_MINUTES` | `120` | Minimum gap between consecutive alerts |
 | `LOG_FILE` | `~/logs/fear_greed.log` | Log file location |
+
+> **Note on the daily schedule:** the daily agent's `StartCalendarInterval` fires
+> at 21:35 in the Mac's *system* timezone — keep the machine on `Asia/Singapore`.
+> The script itself always evaluates its gates in SGT, so a mis-set system clock
+> can delay the summary but never duplicate it.
 
 ---
 
@@ -176,8 +220,9 @@ All parameters are at the top of `fear_greed_monitor.sh`:
 ```
 fear-greed-monitor/
 ├── README.md                                  # This file
-├── fear_greed_monitor.sh                      # Core monitoring script
-├── com.eightday.fear-greed-monitor.plist       # macOS LaunchAgent (cron)
+├── fear_greed_monitor.sh                      # Core monitoring script (alert + daily modes)
+├── com.eightday.fear-greed-monitor.plist       # LaunchAgent: alert mode, every 30 min
+├── com.eightday.fear-greed-daily.plist         # LaunchAgent: daily summary at 21:35 SGT
 ├── install.sh                                 # One-command installer
 ├── SKILL.md                                   # OpenClaw skill definition
 ├── .env.example                               # Template for credentials
@@ -223,14 +268,19 @@ tail -20 ~/logs/fear_greed.log
 # Live-follow logs
 tail -f ~/logs/fear_greed.log
 
-# Check LaunchAgent status
+# Check LaunchAgent status (should list both agents)
 launchctl list | grep fear-greed
 
-# Pause monitoring
-launchctl unload ~/Library/LaunchAgents/com.eightday.fear-greed-monitor.plist
+# Send the daily summary manually (respects the once-per-day guard)
+bash fear_greed_monitor.sh --daily
 
-# Resume monitoring
+# Pause monitoring (both agents)
+launchctl unload ~/Library/LaunchAgents/com.eightday.fear-greed-monitor.plist
+launchctl unload ~/Library/LaunchAgents/com.eightday.fear-greed-daily.plist
+
+# Resume monitoring (both agents)
 launchctl load -w ~/Library/LaunchAgents/com.eightday.fear-greed-monitor.plist
+launchctl load -w ~/Library/LaunchAgents/com.eightday.fear-greed-daily.plist
 
 # Check current Fear & Greed score
 curl -s "https://feargreedchart.com/api/?action=all" | jq '.score.score'
@@ -250,14 +300,16 @@ curl -s "https://feargreedchart.com/api/?action=all" | jq '.score.score'
 
 **Why 2-hour cooldown?** The Fear & Greed Index updates once per trading day, not intraday. Without a cooldown, a score of 8 would trigger alerts every 30 minutes for 7.5 hours. The cooldown ensures one alert per significant reading.
 
+**Why `RunAtLoad` + a state file for the daily summary?** `StartCalendarInterval` catches up missed runs after *sleep*, but not after a *shutdown*. `RunAtLoad` fires the daily agent on every boot/login, and the script's gate (send only at/after 21:35 SGT, only once per day) turns that into safe catch-up behavior. The marker lives in `$HOME` — not `/tmp`, which macOS wipes on reboot — so a restart can never cause a duplicate send.
+
 ---
 
 ## Roadmap
 
 - [ ] **Google Sheets logging** — append each score to a spreadsheet for historical trend analysis
 - [ ] **Multi-threshold tiers** — separate alerts for < 20 (Fear), < 10 (Extreme Fear), < 5 (Capitulation)
+- [x] **Daily digest** — daily Telegram summary at 9:35 PM SGT regardless of score
 - [ ] **Crypto F&G support** — add alternative.me crypto Fear & Greed as a parallel monitor
-- [ ] **Daily digest** — summary Telegram message at market close with day's score + trend
 - [ ] **Grafana dashboard** — time-series visualization of historical scores
 - [ ] **Linux/Docker support** — systemd timer + containerised version for cloud deployment
 
