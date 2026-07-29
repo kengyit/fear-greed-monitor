@@ -84,6 +84,7 @@ echo "   ✅ Script is executable"
 # ─── 4. Test API connectivity ──────────────────────────────
 echo ""
 echo "🌐 Testing API connectivity..."
+API_URL="https://feargreedchart.com/api/?action=all"
 TEST_SCORE=$(curl -s --max-time 10 "$API_URL" 2>/dev/null | jq -r '.score.score // empty' 2>/dev/null || true)
 
 if [ -n "$TEST_SCORE" ]; then
