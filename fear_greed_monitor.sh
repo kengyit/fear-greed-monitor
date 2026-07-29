@@ -47,6 +47,10 @@ THRESHOLD="${FGI_THRESHOLD:-10}"
 TELEGRAM_BOT_TOKEN="${FGI_TELEGRAM_BOT_TOKEN:?Error: Set FGI_TELEGRAM_BOT_TOKEN in .env or environment}"
 TELEGRAM_CHAT_ID="${FGI_TELEGRAM_CHAT_ID:?Error: Set FGI_TELEGRAM_CHAT_ID in .env or environment}"
 LOG_FILE="${FGI_LOG_FILE:-$HOME/logs/fear_greed.log}"
+# Primary: CNN's official Fear & Greed endpoint — same number as the
+# gauge on edition.cnn.com/markets/fear-and-greed
+CNN_API_URL="https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
+# Fallback mirror (may lag/diverge from CNN), used only if CNN fails
 API_URL="https://feargreedchart.com/api/?action=all"
 
 # Time window (SGT) — alert mode only runs between 9PM and 4:30AM
@@ -180,21 +184,41 @@ cpi_line() {
     echo "  • CPI: ${cur}% (last: ${last}% (as of $(fred_date_fmt "$lastd")))"
 }
 
+news_date_fmt() {
+    # RFC-822 RSS date ("Wed, 30 Jul 2026 04:12:33 GMT") → "30/7/2026 12:12 SGT"
+    # Tries GNU date, then BSD (macOS) date; falls back to the raw string.
+    local d="$1" out
+    out=$(TZ="Asia/Singapore" date -d "$d" "+%-d/%-m/%Y %H:%M SGT" 2>/dev/null) \
+        || out=$(TZ="Asia/Singapore" date -j -f "%a, %d %b %Y %H:%M:%S %Z" "$d" "+%-d/%-m/%Y %H:%M SGT" 2>/dev/null) \
+        || out=$(TZ="Asia/Singapore" date -j -f "%a, %d %b %Y %H:%M:%S %z" "$d" "+%-d/%-m/%Y %H:%M SGT" 2>/dev/null) \
+        || out="$d"
+    echo "$out"
+}
+
 news_lines() {
-    # Top 3 headlines from the CNBC Top News RSS feed
-    local rss titles
+    # Top 3 headlines from the CNBC Top News RSS feed, each with its
+    # publish datetime (converted to SGT)
+    local rss items item title pd
     rss=$(curl -s --max-time 10 -H "User-Agent: Mozilla/5.0" \
         "https://www.cnbc.com/id/100003114/device/rss/rss.html" 2>/dev/null) || rss=""
-    # Flatten, strip CDATA, pull <title> tags; first title is the channel name
-    titles=$(echo "$rss" | tr -d '\r\n' | sed 's/<!\[CDATA\[//g; s/\]\]>//g' \
-        | grep -o '<title>[^<]*</title>' | sed 's/<\/*title>//g' \
-        | sed "s/&amp;/\&/g; s/&#039;/'/g; s/&quot;/\"/g; s/&apos;/'/g" \
-        | tail -n +2 | head -3) || titles=""
-    if [ -z "$titles" ]; then
+    # Flatten, then split so each <item> sits on its own line, keeping
+    # title and pubDate paired per story
+    items=$(echo "$rss" | tr -d '\r\n' | sed $'s/<item>/\\\n<item>/g' \
+        | grep '^<item>' | head -3) || items=""
+    if [ -z "$items" ]; then
         echo "      • (news unavailable)"
         return 0
     fi
-    echo "$titles" | sed 's/^/      • /'
+    while IFS= read -r item; do
+        title=$(echo "$item" | sed 's/.*<title>//; s|</title>.*||; s/<!\[CDATA\[//g; s/\]\]>//g' \
+            | sed "s/&amp;/\&/g; s/&#039;/'/g; s/&quot;/\"/g; s/&apos;/'/g")
+        pd=$(echo "$item" | sed -n 's/.*<pubDate>\([^<]*\)<\/pubDate>.*/\1/p')
+        if [ -n "$pd" ]; then
+            echo "      • ${title} ($(news_date_fmt "$pd"))"
+        else
+            echo "      • ${title}"
+        fi
+    done <<< "$items"
 }
 
 # ─── MODE GATES ─────────────────────────────────────────────
@@ -258,34 +282,74 @@ set_cooldown() {
 }
 
 # ─── FETCH FEAR & GREED INDEX ──────────────────────────────
+# Primary: CNN's official endpoint (matches the cnn.com gauge).
+# Fallback: the feargreedchart.com mirror if CNN is unreachable.
 
-log "FETCH — Calling API at $SGT_TIME (mode: $MODE)"
+SOURCE_NAME="CNN"
+log "FETCH — Calling CNN Fear & Greed API at $SGT_TIME (mode: $MODE)"
 
 # `|| CURL_EXIT=$?` keeps set -e from killing the script before
 # the failure is logged
 CURL_EXIT=0
-RESPONSE=$(curl -s --max-time 15 "$API_URL" 2>&1) || CURL_EXIT=$?
+RESPONSE=$(curl -s --max-time 15 -H "User-Agent: Mozilla/5.0" "$CNN_API_URL" 2>&1) || CURL_EXIT=$?
+RAW_SCORE=$(echo "$RESPONSE" | jq -r '.fear_and_greed.score // empty' 2>/dev/null) || RAW_SCORE=""
 
-if [ $CURL_EXIT -ne 0 ] || [ -z "$RESPONSE" ]; then
-    log "ERROR — API request failed (curl exit: $CURL_EXIT)"
-    exit 1
-fi
+if [ -n "$RAW_SCORE" ]; then
+    SCORE=$(printf "%.0f" "$RAW_SCORE")
 
-# ─── PARSE SCORE ───────────────────────────────────────────
-# API may return { "score": { "score": 42, ... } } or { "score": 42 }
-# Try nested first, then top-level
+    # CNN publishes 7 component indicators (score + rating, no weights)
+    BREAKDOWN_FLAT=$(echo "$RESPONSE" | jq -r '
+        def line(name; key):
+            "  • " + name + ": "
+            + ((.[key].score // empty) | round | tostring) + "/100 ("
+            + (.[key].rating // "?") + ")";
+        [line("Market Momentum (S&P500)"; "market_momentum_sp500"),
+         line("Stock Price Strength"; "stock_price_strength"),
+         line("Stock Price Breadth"; "stock_price_breadth"),
+         line("Put/Call Options"; "put_call_options"),
+         line("Market Volatility (VIX)"; "market_volatility_vix"),
+         line("Junk Bond Demand"; "junk_bond_demand"),
+         line("Safe Haven Demand"; "safe_haven_demand")] | join("\n")' 2>/dev/null) || BREAKDOWN_FLAT=""
+    if [ -z "$BREAKDOWN_FLAT" ]; then
+        BREAKDOWN_FLAT="  (Component breakdown not available)"
+    fi
+else
+    log "WARN — CNN API failed (curl exit: $CURL_EXIT). Falling back to feargreedchart.com."
+    SOURCE_NAME="feargreedchart.com"
 
-SCORE=$(echo "$RESPONSE" | jq -r '.score.score // empty' 2>/dev/null)
+    CURL_EXIT=0
+    RESPONSE=$(curl -s --max-time 15 "$API_URL" 2>&1) || CURL_EXIT=$?
 
-if [ -z "$SCORE" ]; then
-    SCORE=$(echo "$RESPONSE" | jq -r 'if (.score | type) == "number" then .score else empty end' 2>/dev/null)
-fi
+    if [ $CURL_EXIT -ne 0 ] || [ -z "$RESPONSE" ]; then
+        log "ERROR — Fallback API request failed (curl exit: $CURL_EXIT)"
+        exit 1
+    fi
 
-if [ -z "$SCORE" ]; then
-    RESPONSE_KEYS=$(echo "$RESPONSE" | jq -r 'keys | join(", ")' 2>/dev/null)
-    log "ERROR — Could not parse score. Top-level keys: $RESPONSE_KEYS"
-    log "DEBUG — Raw response (first 500 chars): $(echo "$RESPONSE" | head -c 500)"
-    exit 1
+    # Mirror may return { "score": { "score": 42, ... } } or { "score": 42 }
+    SCORE=$(echo "$RESPONSE" | jq -r '.score.score // empty' 2>/dev/null) || SCORE=""
+    if [ -z "$SCORE" ]; then
+        SCORE=$(echo "$RESPONSE" | jq -r 'if (.score | type) == "number" then .score else empty end' 2>/dev/null) || SCORE=""
+    fi
+    if [ -z "$SCORE" ]; then
+        RESPONSE_KEYS=$(echo "$RESPONSE" | jq -r 'keys | join(", ")' 2>/dev/null) || RESPONSE_KEYS=""
+        log "ERROR — Could not parse score. Top-level keys: $RESPONSE_KEYS"
+        log "DEBUG — Raw response (first 500 chars): $(echo "$RESPONSE" | head -c 500)"
+        exit 1
+    fi
+
+    COMP_COUNT=$(echo "$RESPONSE" | jq -r '.score.components // [] | length' 2>/dev/null) || COMP_COUNT=0
+    BREAKDOWN=""
+    if [ -n "$COMP_COUNT" ] && [ "$COMP_COUNT" -gt 0 ]; then
+        for i in $(seq 0 $((COMP_COUNT - 1))); do
+            COMP_NAME=$(echo "$RESPONSE" | jq -r ".score.components[$i].name // \"Component $((i+1))\"")
+            COMP_VAL=$(echo "$RESPONSE" | jq -r ".score.components[$i].val // \"?\"")
+            COMP_WT=$(echo "$RESPONSE" | jq -r ".score.components[$i].wt // \"?\"")
+            BREAKDOWN="${BREAKDOWN}  • ${COMP_NAME}: ${COMP_VAL}/100 (wt: ${COMP_WT}%)\n"
+        done
+    else
+        BREAKDOWN="  (Component breakdown not available)\n"
+    fi
+    BREAKDOWN_FLAT=$(echo -e "$BREAKDOWN")
 fi
 
 # ─── DETERMINE LABEL ───────────────────────────────────────
@@ -302,26 +366,7 @@ else
     LABEL="Extreme Greed"
 fi
 
-# ─── PARSE COMPONENTS ─────────────────────────────────────
-# Extract each component: name, val, wt
-
-COMP_COUNT=$(echo "$RESPONSE" | jq -r '.score.components // [] | length' 2>/dev/null)
-BREAKDOWN=""
-
-if [ -n "$COMP_COUNT" ] && [ "$COMP_COUNT" -gt 0 ]; then
-    for i in $(seq 0 $((COMP_COUNT - 1))); do
-        COMP_NAME=$(echo "$RESPONSE" | jq -r ".score.components[$i].name // \"Component $((i+1))\"")
-        COMP_VAL=$(echo "$RESPONSE" | jq -r ".score.components[$i].val // \"?\"")
-        COMP_WT=$(echo "$RESPONSE" | jq -r ".score.components[$i].wt // \"?\"")
-        BREAKDOWN="${BREAKDOWN}  • ${COMP_NAME}: ${COMP_VAL}/100 (wt: ${COMP_WT}%)\n"
-    done
-else
-    BREAKDOWN="  (Component breakdown not available)\n"
-fi
-
-BREAKDOWN_FLAT=$(echo -e "$BREAKDOWN")
-
-log "SCORE — $SCORE ($LABEL) | Threshold: <$THRESHOLD"
+log "SCORE — $SCORE ($LABEL) | Source: $SOURCE_NAME | Threshold: <$THRESHOLD"
 
 # ─── DAILY SUMMARY (daily mode) ────────────────────────────
 
@@ -383,7 +428,7 @@ if [ "$SCORE" -lt "$THRESHOLD" ]; then
 ${BREAKDOWN_FLAT}
 ⚠️ Index is below ${THRESHOLD} — market in extreme fear territory.
 
-Source: feargreedchart.com
+Source: ${SOURCE_NAME}
 EOF
 )
 

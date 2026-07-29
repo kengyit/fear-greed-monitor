@@ -38,7 +38,7 @@ current score every day at 9:35 PM SGT, whatever the value is.
 LaunchAgent ① alert (every 30 min, RunAtLoad on boot/login)
   └── fear_greed_monitor.sh
         ├── Check SGT time window (21:00–04:30)
-        ├── GET feargreedchart.com/api/?action=all
+        ├── GET CNN F&G API (falls back to feargreedchart.com)
         ├── Parse composite score + 5 components via jq
         ├── IF score < 10 → POST Telegram alert
         └── Log result to ~/logs/fear_greed.log
@@ -47,12 +47,12 @@ LaunchAgent ② daily (9:35 PM daily, RunAtLoad on boot/login)
   └── fear_greed_monitor.sh --daily
         ├── Skip if before 21:35 SGT or already sent today
         │   (marker: ~/.fear_greed_daily_last_sent — reboot-safe)
-        ├── GET + parse F&G score (same pipeline)
+        ├── GET + parse F&G score (CNN, mirror fallback)
         ├── Fetch market snapshot (all best-effort, "n/a" on failure):
         │   S&P500 / Nasdaq / HSI / Bitcoin — Yahoo Finance
         │   US Fed rate, CPI YoY, unemployment — FRED CSV (no key,
         │   all United States monthly series)
-        │   Top-3 headlines — CNBC Top News RSS
+        │   Top-3 headlines + publish datetime — CNBC RSS
         ├── POST Telegram daily summary (unconditional on score)
         └── Log result to ~/logs/fear_greed.log
 ```
@@ -91,7 +91,7 @@ All config is at the top of `fear_greed_monitor.sh`:
 ```
 📊 Daily Fear & Greed Update
 
-📈 Fear & Greed Index: 42 (Neutral)
+📈 Fear & Greed Index: 33 (Fear)
 📅 2026-07-29, 21:35 SGT
 
 📉 Index:
@@ -103,9 +103,9 @@ All config is at the top of `fear_greed_monitor.sh`:
   • CPI: 2.6% (last: 2.4% (as of 1/6/2026))
   • Unemployment Rate: 4.2% (last: 4.1% (as of 1/6/2026))
   • Top 3 breaking news:
-      • China unveils new chip breakthrough, rattling US tech stocks
-      • Fed holds rates steady as inflation cools & markets rally
-      • Bitcoin slips below $120K after record ETF inflows pause
+      • China unveils new chip breakthrough, rattling US tech stocks (29/7/2026 21:12 SGT)
+      • Fed holds rates steady as inflation cools & markets rally (29/7/2026 18:05 SGT)
+      • Bitcoin slips below $120K after record ETF inflows pause (29/7/2026 06:47 SGT)
 ```
 
 ## Telegram Alert Format (score < 10 only)
@@ -117,15 +117,17 @@ All config is at the top of `fear_greed_monitor.sh`:
 🕐 Checked at: 22:30 SGT
 
 📉 Component Breakdown:
-  • Market Volatility (VIX): 5/100 (wt: 25%)
-  • Market Momentum: 9/100 (wt: 25%)
-  • Put/Call Ratio: 8/100 (wt: 20%)
-  • Safe Haven Demand: 6/100 (wt: 15%)
-  • Junk Bond Appetite: 11/100 (wt: 15%)
+  • Market Momentum (S&P500): 5/100 (extreme fear)
+  • Stock Price Strength: 9/100 (extreme fear)
+  • Stock Price Breadth: 8/100 (extreme fear)
+  • Put/Call Options: 6/100 (extreme fear)
+  • Market Volatility (VIX): 4/100 (extreme fear)
+  • Junk Bond Demand: 11/100 (extreme fear)
+  • Safe Haven Demand: 7/100 (extreme fear)
 
 ⚠️ Index is below 10 — market in extreme fear territory.
 
-Source: feargreedchart.com
+Source: CNN
 ```
 
 ## Commands (via Telegram to OpenClaw)

@@ -47,7 +47,8 @@ The Fear & Greed Index is a composite of 5 market indicators that captures inves
 │        │       → Skip + log if outside window               │
 │        │                                                    │
 │        ├── 2. DATA EXTRACTION                               │
-│        │   └── GET feargreedchart.com/api/?action=all       │
+│        │   └── GET CNN F&G API (official gauge data);       │
+│        │       falls back to feargreedchart.com mirror      │
 │        │       → Parse composite score via jq               │
 │        │       → Extract 5 component scores + weights       │
 │        │                                                    │
@@ -119,7 +120,7 @@ Every day at 9:35 PM SGT, regardless of the score:
 ```
 📊 Daily Fear & Greed Update
 
-📈 Fear & Greed Index: 42 (Neutral)
+📈 Fear & Greed Index: 33 (Fear)
 📅 2026-07-29, 21:35 SGT
 
 📉 Index:
@@ -131,9 +132,9 @@ Every day at 9:35 PM SGT, regardless of the score:
   • CPI: 2.6% (last: 2.4% (as of 1/6/2026))
   • Unemployment Rate: 4.2% (last: 4.1% (as of 1/6/2026))
   • Top 3 breaking news:
-      • China unveils new chip breakthrough, rattling US tech stocks
-      • Fed holds rates steady as inflation cools & markets rally
-      • Bitcoin slips below $120K after record ETF inflows pause
+      • China unveils new chip breakthrough, rattling US tech stocks (29/7/2026 21:12 SGT)
+      • Fed holds rates steady as inflation cools & markets rally (29/7/2026 18:05 SGT)
+      • Bitcoin slips below $120K after record ETF inflows pause (29/7/2026 06:47 SGT)
 ```
 
 Market data sources (all free, no API keys): index and Bitcoin quotes from
@@ -142,7 +143,10 @@ Unemployment Rate are **United States monthly series** from FRED public CSVs —
 Effective Federal Funds Rate (`FEDFUNDS`), CPI year-over-year computed from
 `CPIAUCSL`, and civilian unemployment rate (`UNRATE`) — each shown as the
 latest monthly value with the previous month's reading and its as-of date.
-Headlines come from the CNBC Top News RSS feed. Every line is best-effort —
+Headlines come from the CNBC Top News RSS feed, each with its publish
+datetime converted to SGT. The Fear & Greed score itself comes from CNN's
+official API — the same number as the gauge on cnn.com — with the
+feargreedchart.com mirror as fallback. Every line is best-effort —
 if a source is down it shows `n/a` and the summary is still delivered.
 
 When the index drops below the threshold, the bot delivers this message:
@@ -154,15 +158,17 @@ When the index drops below the threshold, the bot delivers this message:
 🕐 Checked at: 22:30 SGT
 
 📉 Component Breakdown:
-  • Market Volatility (VIX): 5/100 (wt: 25%)
-  • Market Momentum: 9/100 (wt: 25%)
-  • Put/Call Ratio: 8/100 (wt: 20%)
-  • Safe Haven Demand: 6/100 (wt: 15%)
-  • Junk Bond Appetite: 11/100 (wt: 15%)
+  • Market Momentum (S&P500): 5/100 (extreme fear)
+  • Stock Price Strength: 9/100 (extreme fear)
+  • Stock Price Breadth: 8/100 (extreme fear)
+  • Put/Call Options: 6/100 (extreme fear)
+  • Market Volatility (VIX): 4/100 (extreme fear)
+  • Junk Bond Demand: 11/100 (extreme fear)
+  • Safe Haven Demand: 7/100 (extreme fear)
 
 ⚠️ Index is below 10 — market in extreme fear territory.
 
-Source: feargreedchart.com
+Source: CNN
 ```
 
 ---
