@@ -123,11 +123,14 @@ add_commas() {
 yahoo_line() {
     # $1 = display name, $2 = URL-encoded Yahoo symbol
     # Prints: "  • S&P500: 6,364 (down: 0.3%)"
+    # IMPORTANT: range must be 1d — with a longer range, Yahoo's
+    # chartPreviousClose is the close before the range START (days ago),
+    # which silently turns the %% into a multi-day cumulative move.
     local json price prev pct dir
     json=$(curl -s --max-time 10 -H "User-Agent: Mozilla/5.0" \
-        "https://query1.finance.yahoo.com/v8/finance/chart/${2}?interval=1d&range=5d" 2>/dev/null) || json=""
+        "https://query1.finance.yahoo.com/v8/finance/chart/${2}?interval=1d&range=1d" 2>/dev/null) || json=""
     price=$(echo "$json" | jq -r '.chart.result[0].meta.regularMarketPrice // empty' 2>/dev/null) || price=""
-    prev=$(echo "$json" | jq -r '.chart.result[0].meta.chartPreviousClose // .chart.result[0].meta.previousClose // empty' 2>/dev/null) || prev=""
+    prev=$(echo "$json" | jq -r '.chart.result[0].meta.regularMarketPreviousClose // .chart.result[0].meta.previousClose // .chart.result[0].meta.chartPreviousClose // empty' 2>/dev/null) || prev=""
     if [ -z "$price" ] || [ -z "$prev" ]; then
         echo "  • ${1}: n/a"
         return 0
@@ -290,8 +293,13 @@ log "FETCH — Calling CNN Fear & Greed API at $SGT_TIME (mode: $MODE)"
 
 # `|| CURL_EXIT=$?` keeps set -e from killing the script before
 # the failure is logged
+# CNN rejects bare/robotic user agents — send a full browser UA string
+BROWSER_UA="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 CURL_EXIT=0
-RESPONSE=$(curl -s --max-time 15 -H "User-Agent: Mozilla/5.0" "$CNN_API_URL" 2>&1) || CURL_EXIT=$?
+RESPONSE=$(curl -s --max-time 15 \
+    -H "User-Agent: $BROWSER_UA" \
+    -H "Accept: application/json" \
+    "$CNN_API_URL" 2>&1) || CURL_EXIT=$?
 RAW_SCORE=$(echo "$RESPONSE" | jq -r '.fear_and_greed.score // empty' 2>/dev/null) || RAW_SCORE=""
 
 if [ -n "$RAW_SCORE" ]; then
@@ -387,10 +395,17 @@ if [ "$MODE" = "daily" ]; then
 
     log "DAILY — Sending daily summary for $SGT_DATE."
 
+    # Flag the score when it came from the fallback mirror, so a number
+    # that diverges from CNN's gauge is never presented silently
+    SCORE_NOTE=""
+    if [ "$SOURCE_NAME" != "CNN" ]; then
+        SCORE_NOTE=" ⚠️ mirror value, CNN unreachable"
+    fi
+
     MESSAGE=$(cat <<EOF
 📊 Daily Fear & Greed Update
 
-📈 Fear & Greed Index: ${SCORE} (${LABEL})
+📈 Fear & Greed Index: ${SCORE} (${LABEL})${SCORE_NOTE}
 📅 ${SGT_DATE}, ${SGT_TIME}
 
 📉 Index:
