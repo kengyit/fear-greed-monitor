@@ -84,14 +84,22 @@ log() {
 }
 
 # ─── TELEGRAM SENDER ────────────────────────────────────────
-# send_telegram "message text" [with_refresh]
-# Returns 0 on delivery, 1 on failure. Passing "with_refresh" attaches
-# an inline 🔄 button that triggers a fresh summary (see --listener).
+# send_telegram "message text" [with_refresh] [html]
+# Returns 0 on delivery, 1 on failure.
+#   with_refresh — attach an inline 🔄 button that triggers a fresh
+#                  summary (see --listener)
+#   html         — send with parse_mode HTML (message body must already
+#                  be escaped via html_escape, tags added after)
+
+html_escape() {
+    # & first, then < and > — order matters
+    sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'
+}
 
 send_telegram() {
     local message="$1"
-    local with_button="${2:-}"
-    local payload result ok err
+    shift
+    local payload result ok err opt
 
     # JSON payload for proper encoding of newlines, emoji, ampersands
     payload=$(jq -n \
@@ -99,10 +107,17 @@ send_telegram() {
         --arg text "$message" \
         '{chat_id: $chat_id, text: $text}')
 
-    if [ "$with_button" = "with_refresh" ]; then
-        payload=$(echo "$payload" | jq \
-            '. + {reply_markup: {inline_keyboard: [[{text: "🔄 Refresh data", callback_data: "fgi_refresh"}]]}}')
-    fi
+    for opt in "$@"; do
+        case "$opt" in
+            with_refresh)
+                payload=$(echo "$payload" | jq \
+                    '. + {reply_markup: {inline_keyboard: [[{text: "🔄 Refresh data", callback_data: "fgi_refresh"}]]}}')
+                ;;
+            html)
+                payload=$(echo "$payload" | jq '. + {parse_mode: "HTML"}')
+                ;;
+        esac
+    done
 
     result=$(curl -s --max-time 10 \
         -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
@@ -479,18 +494,22 @@ if [ "$MODE" = "daily" ]; then
         SCORE_NOTE=" ⚠️ mirror value, CNN unreachable"
     fi
 
-    MESSAGE=$(cat <<EOF
-📊 Daily Fear & Greed Update
+    # HTML mode: escape the data-bearing parts, then add formatting tags
+    SNAPSHOT_ESC=$(printf '%s\n' "$SNAPSHOT" | html_escape)
+    NOTE_ESC=$(printf '%s' "$SCORE_NOTE" | html_escape)
 
-📈 Fear & Greed Index: ${SCORE} (${LABEL})${SCORE_NOTE}
+    MESSAGE=$(cat <<EOF
+<b><u>📊 Daily Fear &amp; Greed Update</u></b>
+
+📈 Fear &amp; Greed Index: ${SCORE} (${LABEL})${NOTE_ESC}
 📅 ${SGT_DATE}, ${SGT_TIME}
 
 📉 Index:
-${SNAPSHOT}
+${SNAPSHOT_ESC}
 EOF
 )
 
-    if send_telegram "$MESSAGE" with_refresh; then
+    if send_telegram "$MESSAGE" with_refresh html; then
         log "DAILY-SENT — Daily summary delivered successfully"
         # A --test send doesn't count as today's summary
         if [ "$FORCE_TEST" = false ]; then
