@@ -293,13 +293,19 @@ log "FETCH — Calling CNN Fear & Greed API at $SGT_TIME (mode: $MODE)"
 
 # `|| CURL_EXIT=$?` keeps set -e from killing the script before
 # the failure is logged
-# CNN rejects bare/robotic user agents — send a full browser UA string
+# CNN rejects bare/robotic user agents — send full browser-like headers
 BROWSER_UA="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-CURL_EXIT=0
-RESPONSE=$(curl -s --max-time 15 \
+CNN_TMP=$(mktemp)
+HTTP_CODE=$(curl -s --max-time 20 --compressed \
     -H "User-Agent: $BROWSER_UA" \
-    -H "Accept: application/json" \
-    "$CNN_API_URL" 2>&1) || CURL_EXIT=$?
+    -H "Accept: application/json, text/plain, */*" \
+    -H "Accept-Language: en-US,en;q=0.9" \
+    -H "Origin: https://edition.cnn.com" \
+    -H "Referer: https://edition.cnn.com/" \
+    -o "$CNN_TMP" -w "%{http_code}" \
+    "$CNN_API_URL" 2>/dev/null) || HTTP_CODE="000"
+RESPONSE=$(cat "$CNN_TMP" 2>/dev/null) || RESPONSE=""
+rm -f "$CNN_TMP"
 RAW_SCORE=$(echo "$RESPONSE" | jq -r '.fear_and_greed.score // empty' 2>/dev/null) || RAW_SCORE=""
 
 if [ -n "$RAW_SCORE" ]; then
@@ -322,7 +328,7 @@ if [ -n "$RAW_SCORE" ]; then
         BREAKDOWN_FLAT="  (Component breakdown not available)"
     fi
 else
-    log "WARN — CNN API failed (curl exit: $CURL_EXIT). Falling back to feargreedchart.com."
+    log "WARN — CNN API failed (HTTP $HTTP_CODE, body: $(echo "$RESPONSE" | head -c 200)). Falling back to feargreedchart.com."
     SOURCE_NAME="feargreedchart.com"
 
     CURL_EXIT=0
