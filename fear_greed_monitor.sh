@@ -263,8 +263,12 @@ if [ "$MODE" = "listener" ]; then
         OFFSET=$(cat "$OFFSET_FILE" 2>/dev/null)
         [ -z "$OFFSET" ] && OFFSET=0
 
+        # allowed_updates is explicit and includes callback_query: Telegram
+        # persists this setting server-side, and a previous consumer of this
+        # bot may have narrowed it to messages only — which silently drops
+        # button taps for every future poll that doesn't re-request them.
         UPDATES=$(curl -s --max-time 60 \
-            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates?timeout=50&offset=${OFFSET}" 2>/dev/null)
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates?timeout=50&offset=${OFFSET}&allowed_updates=%5B%22message%22%2C%22callback_query%22%5D" 2>/dev/null)
         OK=$(echo "$UPDATES" | jq -r '.ok // false' 2>/dev/null)
         if [ "$OK" != "true" ]; then
             ERR=$(echo "$UPDATES" | jq -r '.description // "no response"' 2>/dev/null)
@@ -304,6 +308,9 @@ if [ "$MODE" = "listener" ]; then
             if [ "$TRIGGER" = true ]; then
                 log "LISTENER — Refresh requested via Telegram. Sending fresh summary."
                 bash "$0" --daily --test || log "LISTENER — Refresh run failed."
+            elif [ -n "$CB_ID" ] || [ -n "$MSG_TEXT" ]; then
+                # Surface why an update didn't trigger (wrong sender / data)
+                log "LISTENER — Ignored update (from: ${CB_FROM:-$MSG_FROM}, data: ${CB_DATA:-$MSG_TEXT})."
             fi
         done
     done
