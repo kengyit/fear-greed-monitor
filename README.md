@@ -22,13 +22,15 @@
 
 A lightweight, self-hosted market sentiment monitoring system that tracks the **CNN Fear & Greed Index** and pushes real-time Telegram alerts when the index enters **Extreme Fear** territory (score < 10). It also delivers a **daily summary at 9:35 PM SGT** — every day, regardless of the score — timed just after the US market opens.
 
-Both schedules survive reboots: the LaunchAgents reload automatically whenever the machine is started again and run an immediate catch-up check. If the machine was off at 21:35, the daily summary is sent as soon as it's next started that day — once per day, never duplicated.
+Every summary carries an inline **🔄 Refresh data** button — tap it (or send `/refresh` to the bot) and a freshly-fetched summary arrives within seconds, powered by a long-polling listener daemon.
+
+All schedules survive reboots: the LaunchAgents reload automatically whenever the machine is started again and run an immediate catch-up check. If the machine was off at 21:35, the daily summary is sent as soon as it's next started that day — once per day, never duplicated.
 
 Built to run autonomously on a Mac Mini as part of a personal AI command centre, this project demonstrates practical data engineering: API data extraction, time-windowed scheduling, structured alerting, and fault-tolerant automation — all in a single zero-dependency shell script.
 
 ### Why This Matters
 
-The Fear & Greed Index is a composite of 5 market indicators that captures investor sentiment on a 0–100 scale. Historically, scores below 10 have coincided with significant market dislocations — moments where disciplined investors find asymmetric buying opportunities. This tool ensures those moments are never missed, even at 2 AM.
+The Fear & Greed Index is a composite of 7 market indicators that captures investor sentiment on a 0–100 scale. Historically, scores below 10 have coincided with significant market dislocations — moments where disciplined investors find asymmetric buying opportunities. This tool ensures those moments are never missed, even at 2 AM.
 
 ---
 
@@ -50,7 +52,7 @@ The Fear & Greed Index is a composite of 5 market indicators that captures inves
 │        │   └── GET CNN F&G API (official gauge data);       │
 │        │       falls back to feargreedchart.com mirror      │
 │        │       → Parse composite score via jq               │
-│        │       → Extract 5 component scores + weights       │
+│        │       → Extract CNN's 7 component indicators       │
 │        │                                                    │
 │        ├── 3. THRESHOLD ENGINE                              │
 │        │   └── Score < 10? → trigger alert pipeline         │
@@ -81,8 +83,18 @@ The Fear & Greed Index is a composite of 5 market indicators that captures inves
 │        │                                                    │
 │        └── 3. UNCONDITIONAL DELIVERY                        │
 │            └── Telegram summary sent regardless of score    │
+│                → Inline 🔄 Refresh button attached          │
 │                → RunAtLoad catches up a send missed while   │
 │                   the machine was powered off               │
+│                                                             │
+│  ③ LISTENER AGENT — always on (KeepAlive daemon)            │
+│  └── fear_greed_monitor.sh --listener                       │
+│        │                                                    │
+│        ├── Long-polls Telegram getUpdates (50s timeout)     │
+│        ├── 🔄 button tap or /refresh → answers callback,    │
+│        │   fires a fresh on-demand summary                  │
+│        ├── Only the configured chat ID is honored           │
+│        └── Auto-restarts on crash and on every boot         │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -90,15 +102,17 @@ The Fear & Greed Index is a composite of 5 market indicators that captures inves
 
 ## Fear & Greed Index Components
 
-The composite score is derived from 5 equally-important market signals:
+The composite score is derived from CNN's 7 market indicators:
 
 | Component | What It Measures | Fear Signal |
 |-----------|-----------------|-------------|
+| **Market Momentum (S&P500)** | S&P 500 vs 125-day moving avg | Price below moving average |
+| **Stock Price Strength** | 52-week highs vs lows on NYSE | More new lows than highs |
+| **Stock Price Breadth** | Advancing vs declining volume | Declining volume dominates |
+| **Put/Call Options** | Options market hedging activity | High put buying = defensive |
 | **Market Volatility (VIX)** | S&P 500 implied volatility | VIX spikes above historical avg |
-| **Market Momentum** | S&P 500 vs 125-day moving avg | Price below moving average |
-| **Put/Call Ratio** | Options market hedging activity | High put buying = defensive |
+| **Junk Bond Demand** | Spread between junk & investment grade | Widening spreads = risk off |
 | **Safe Haven Demand** | Bond vs stock relative returns | Flight to treasury bonds |
-| **Junk Bond Appetite** | Spread between junk & investment grade | Widening spreads = risk off |
 
 Each component scores 0–100. The weighted composite produces the final index value:
 
@@ -201,14 +215,12 @@ chmod +x install.sh
 ### Manual Test Run
 
 ```bash
-# Force a test alert (temporarily sets threshold to 99)
-sed -i '' 's/THRESHOLD=10/THRESHOLD=99/' fear_greed_monitor.sh
-sed -i '' 's/IN_WINDOW=false/IN_WINDOW=true/' fear_greed_monitor.sh
-bash fear_greed_monitor.sh
+# Send a real daily summary right now — bypasses the send-time gate and
+# the once-per-day guard, and does NOT consume today's scheduled send
+bash fear_greed_monitor.sh --daily --test
 
-# Check if Telegram received the alert, then revert
-sed -i '' 's/THRESHOLD=99/THRESHOLD=10/' fear_greed_monitor.sh
-sed -i '' 's/IN_WINDOW=true/IN_WINDOW=false/' fear_greed_monitor.sh
+# Force a test alert without editing the script (env overrides)
+FGI_THRESHOLD=99 FGI_WINDOW_START=0 bash fear_greed_monitor.sh
 ```
 
 ---
@@ -292,7 +304,7 @@ tail -20 ~/logs/fear_greed.log
 # Live-follow logs
 tail -f ~/logs/fear_greed.log
 
-# Check LaunchAgent status (should list both agents)
+# Check LaunchAgent status (should list all three agents)
 launchctl list | grep fear-greed
 
 # Test the daily summary right now (ignores the send-time gate and the
@@ -308,11 +320,11 @@ bash fear_greed_monitor.sh --daily --test
 # after 21:35 SGT and at most once per day)
 bash fear_greed_monitor.sh --daily
 
-# Pause monitoring (both agents)
+# Pause monitoring
 launchctl unload ~/Library/LaunchAgents/com.eightday.fear-greed-monitor.plist
 launchctl unload ~/Library/LaunchAgents/com.eightday.fear-greed-daily.plist
 
-# Resume monitoring (both agents)
+# Resume monitoring
 launchctl load -w ~/Library/LaunchAgents/com.eightday.fear-greed-monitor.plist
 launchctl load -w ~/Library/LaunchAgents/com.eightday.fear-greed-daily.plist
 
@@ -357,7 +369,8 @@ curl -s "https://feargreedchart.com/api/?action=all" | jq '.score.score'
 | Data extraction | curl | HTTP API calls |
 | JSON parsing | jq | Structured data extraction |
 | Scheduling | macOS launchd | Cron-equivalent timer |
-| Alerting | Telegram Bot API | Push notifications |
+| Alerting | Telegram Bot API | Push notifications + inline refresh button |
+| Interactivity | getUpdates long-polling | On-demand refresh listener daemon |
 | Logging | Structured plaintext | Observability |
 
 ---
