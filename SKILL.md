@@ -3,14 +3,16 @@ name: fear-greed-monitor
 description: >
   Monitors the CNN/FearGreedChart.com stock market Fear & Greed Index between
   9PM and 4:30AM SGT (US market hours overlap). When the composite score drops
-  below 10 (Extreme Fear), sends an alert to Telegram with the full 5-component
-  breakdown. Also sends a daily Telegram summary at 9:35 PM SGT regardless of
-  the score. Runs as two macOS LaunchAgents that auto-restart on every
-  boot/login (with catch-up for a daily summary missed while powered off).
+  below 10 (Extreme Fear), sends an alert to Telegram with the full
+  7-component breakdown. Also sends a daily Telegram summary (market snapshot
+  + news) at 9:35 PM SGT regardless of the score, with an inline 🔄 Refresh
+  button for on-demand updates. Runs as three macOS LaunchAgents that
+  auto-restart on every boot/login (with catch-up for a daily summary missed
+  while powered off).
   Use this skill when the user asks about market sentiment, Fear & Greed Index
   status, extreme fear alerts, the daily summary, or wants to check/modify the
   monitoring schedule or threshold.
-version: 1.1.0
+version: 1.2.0
 metadata:
   openclaw:
     emoji: "😱"
@@ -26,11 +28,13 @@ metadata:
 
 ## Purpose
 
-You are a market sentiment watchdog. Your job is to (1) periodically check the
-stock market Fear & Greed Index (from feargreedchart.com) during US market
-hours (9PM–4:30AM SGT) and alert Keng via Telegram when extreme fear is
-detected (score < 10), and (2) send Keng a daily Telegram summary of the
-current score every day at 9:35 PM SGT, whatever the value is.
+You are a market sentiment watchdog. Your job is to (1) periodically check
+CNN's official stock market Fear & Greed Index during US market hours
+(9PM–4:30AM SGT) and alert Keng via Telegram when extreme fear is detected
+(score < 10), (2) send Keng a daily Telegram summary with a full market
+snapshot every day at 9:35 PM SGT, whatever the value is, and (3) respond
+to the 🔄 Refresh button / the /refresh command with a fresh summary on
+demand.
 
 ## Architecture
 
@@ -39,7 +43,7 @@ LaunchAgent ① alert (every 30 min, RunAtLoad on boot/login)
   └── fear_greed_monitor.sh
         ├── Check SGT time window (21:00–04:30)
         ├── GET CNN F&G API (falls back to feargreedchart.com)
-        ├── Parse composite score + 5 components via jq
+        ├── Parse composite score + 7 components via jq
         ├── IF score < 10 → POST Telegram alert
         └── Log result to ~/logs/fear_greed.log
 
@@ -57,7 +61,7 @@ LaunchAgent ② daily (9:35 PM daily, RunAtLoad on boot/login)
         └── Log result to ~/logs/fear_greed.log
 ```
 
-Both agents live in `~/Library/LaunchAgents`, so they reload automatically
+All three agents live in `~/Library/LaunchAgents`, so they reload automatically
 whenever the Mac is restarted; `RunAtLoad` also fires an immediate run at
 load, which catches up a 21:35 send missed while the machine was powered off.
 
@@ -85,7 +89,7 @@ All config is at the top of `fear_greed_monitor.sh`:
 - `com.eightday.fear-greed-monitor.plist` — LaunchAgent: alert mode, every 30 min
 - `com.eightday.fear-greed-daily.plist` — LaunchAgent: daily summary at 21:35 SGT
 - `com.eightday.fear-greed-listener.plist` — LaunchAgent: KeepAlive daemon that long-polls Telegram; a tap on the message's 🔄 Refresh button (or /refresh, /now) sends a freshly-fetched summary
-- `install.sh` — one-command installer (installs both agents)
+- `install.sh` — one-command installer (installs all three agents)
 
 ## Telegram Daily Summary Format (21:35 SGT, unconditional)
 
