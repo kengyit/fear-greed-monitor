@@ -81,6 +81,7 @@ All config is at the top of `fear_greed_monitor.sh`:
 | `DAILY_HOUR` | `21` | Daily summary send hour (SGT) |
 | `DAILY_MIN` | `35` | Daily summary send minute (SGT) |
 | `DAILY_STATE_FILE` | `~/.fear_greed_daily_last_sent` | Once-per-day marker |
+| `LAST_SCORE_FILE` | `~/.fear_greed_last_score` | Baseline for day-over-day index change |
 
 ## Files
 
@@ -96,7 +97,7 @@ All config is at the top of `fear_greed_monitor.sh`:
 ```
 📊 Daily Fear & Greed Update
 
-📈 Fear & Greed Index: 33 (Fear)
+📈 Fear & Greed Index: 33 (Fear) (🔴 -5)
 📅 2026-07-29, 21:35 SGT
 
 📉 Index:

@@ -65,6 +65,9 @@ DAILY_MIN="${FGI_DAILY_MIN:-35}"
 # Persistent state file so a reboot never causes a duplicate daily send
 # (deliberately NOT in /tmp — macOS clears /tmp on reboot)
 DAILY_STATE_FILE="${FGI_DAILY_STATE_FILE:-$HOME/.fear_greed_daily_last_sent}"
+# Score recorded at the last real daily send ("DATE SCORE"), used to show
+# the day-over-day change on the index line
+LAST_SCORE_FILE="${FGI_LAST_SCORE_FILE:-$HOME/.fear_greed_last_score}"
 
 # Cooldown: don't spam alerts within this many minutes
 COOLDOWN_MINUTES="${FGI_COOLDOWN_MINUTES:-120}"
@@ -501,6 +504,24 @@ if [ "$MODE" = "daily" ]; then
         SCORE_NOTE=" ⚠️ mirror value, CNN unreachable"
     fi
 
+    # Day-over-day change vs the score sent at the last real daily
+    # summary (yesterday 21:35 SGT) — e.g. "(🔴 -5)"
+    DELTA_NOTE=""
+    PREV_SCORE=$(awk '{print $2}' "$LAST_SCORE_FILE" 2>/dev/null) || PREV_SCORE=""
+    case "$PREV_SCORE" in
+        ''|*[!0-9]*) PREV_SCORE="" ;;
+    esac
+    if [ -n "$PREV_SCORE" ]; then
+        DELTA=$(( SCORE - PREV_SCORE ))
+        if [ "$DELTA" -gt 0 ]; then
+            DELTA_NOTE=" (🟢 +${DELTA})"
+        elif [ "$DELTA" -lt 0 ]; then
+            DELTA_NOTE=" (🔴 ${DELTA})"
+        else
+            DELTA_NOTE=" (⚪ 0)"
+        fi
+    fi
+
     # HTML mode: escape the data-bearing parts, then add formatting tags
     SNAPSHOT_ESC=$(printf '%s\n' "$SNAPSHOT" | html_escape)
     NOTE_ESC=$(printf '%s' "$SCORE_NOTE" | html_escape)
@@ -508,7 +529,7 @@ if [ "$MODE" = "daily" ]; then
     MESSAGE=$(cat <<EOF
 <b><u>📊 Daily Fear &amp; Greed Update</u></b>
 
-📈 Fear &amp; Greed Index: ${SCORE} (${LABEL})${NOTE_ESC}
+📈 Fear &amp; Greed Index: ${SCORE} (${LABEL})${DELTA_NOTE}${NOTE_ESC}
 📅 ${SGT_DATE}, ${SGT_TIME}
 
 📉 Index:
@@ -521,6 +542,12 @@ EOF
         # A --test send doesn't count as today's summary
         if [ "$FORCE_TEST" = false ]; then
             echo "$SGT_DATE" > "$DAILY_STATE_FILE"
+            # Baseline for tomorrow's day-over-day comparison
+            echo "$SGT_DATE $SCORE" > "$LAST_SCORE_FILE"
+        elif [ ! -f "$LAST_SCORE_FILE" ]; then
+            # Seed the baseline on the very first send so the comparison
+            # appears from the next message onward
+            echo "$SGT_DATE $SCORE" > "$LAST_SCORE_FILE"
         fi
     fi
 
