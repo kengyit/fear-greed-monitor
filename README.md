@@ -26,6 +26,11 @@ Every summary carries an inline **🔄 Refresh data** button — tap it (or send
 
 All schedules survive reboots: the LaunchAgents reload automatically whenever the machine is started again and run an immediate catch-up check. If the machine was off at 21:35, the daily summary is sent as soon as it's next started that day — once per day, never duplicated.
 
+Runs in two flavors: **macOS launchd** (this repo's shell scripts, below) or
+**[n8n Cloud](n8n/README.md)** — two importable workflows that replace all three
+LaunchAgents, with the refresh button handled by a Telegram webhook instead of
+a polling daemon.
+
 Built to run autonomously on a Mac Mini as part of a personal AI command centre, this project demonstrates practical data engineering: API data extraction, time-windowed scheduling, structured alerting, and fault-tolerant automation — all in a single zero-dependency shell script.
 
 ### Why This Matters
@@ -261,6 +266,10 @@ fear-greed-monitor/
 ├── com.eightday.fear-greed-daily.plist         # LaunchAgent: daily summary at 21:35 SGT
 ├── com.eightday.fear-greed-listener.plist      # LaunchAgent: 🔄 refresh-button listener
 ├── install.sh                                 # One-command installer
+├── n8n/                                       # n8n Cloud version (importable workflows)
+│   ├── fear-greed-daily-summary.json          #   daily 21:35 SGT summary + 🔄 refresh webhook
+│   ├── fear-greed-extreme-fear-alert.json     #   30-min extreme-fear alert
+│   └── README.md                              #   setup + migration guide
 ├── SKILL.md                                   # OpenClaw skill definition
 ├── .env.example                               # Template for credentials
 ├── .gitignore                                 # Prevents credential leaks

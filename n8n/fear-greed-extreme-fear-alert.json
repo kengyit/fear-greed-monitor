@@ -1,0 +1,199 @@
+{
+  "name": "Fear & Greed — Extreme Fear Alert",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/30 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "8ffc425d-5bc4-4c5d-a5f1-9ab005906651",
+      "name": "Alert Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Alert mode only runs 21:00–04:30 SGT (US market hours overlap)\nconst parts = Object.fromEntries(\n  new Intl.DateTimeFormat('en-GB', {\n    timeZone: 'Asia/Singapore', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',\n  }).formatToParts(new Date()).map(x => [x.type, x.value]));\nconst h = parseInt(parts.hour, 10);\nconst m = parseInt(parts.minute, 10);\nconst inWindow = h >= 21 || h < 4 || (h === 4 && m <= 30);\nif (!inWindow) return [];\nreturn [{ json: { sgtTime: `${parts.hour}:${parts.minute} SGT` } }];\n"
+      },
+      "id": "8437d527-4853-4922-ad2a-067ff1ed557a",
+      "name": "Window Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -420,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://production.dataviz.cnn.io/index/fearandgreed/graphdata",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json, text/plain, */*"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9"
+            },
+            {
+              "name": "Origin",
+              "value": "https://edition.cnn.com"
+            },
+            {
+              "name": "Referer",
+              "value": "https://edition.cnn.com/"
+            }
+          ]
+        }
+      },
+      "id": "30777eef-e06c-4659-8f05-1eca1d59ae7d",
+      "name": "Fetch CNN",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -200,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://feargreedchart.com/api/?action=all",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "b8d1cda3-7724-48d1-94f0-166a33a52794",
+      "name": "Fetch Mirror",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        20,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Decide whether to fire the extreme-fear alert and build its message.\nconst THRESHOLD = 10;\nconst COOLDOWN_MINUTES = 120;\n\nconst first = (name) => { try { return $(name).first().json; } catch (e) { return null; } };\n\nlet score = null;\nlet sourceName = 'CNN';\nconst cnn = first('Fetch CNN');\nif (cnn && cnn.fear_and_greed && typeof cnn.fear_and_greed.score === 'number') {\n  score = Math.round(cnn.fear_and_greed.score);\n} else {\n  const mirror = first('Fetch Mirror');\n  let raw = null;\n  if (mirror && mirror.score != null) {\n    raw = typeof mirror.score === 'number' ? mirror.score\n        : (typeof mirror.score.score === 'number' ? mirror.score.score : null);\n  }\n  if (raw !== null) { score = Math.round(raw); sourceName = 'feargreedchart.com'; }\n}\nif (score === null) throw new Error('Could not fetch the Fear & Greed score from CNN or the mirror');\n\nif (score >= THRESHOLD) return [];\n\n// Cooldown so a low score doesn't alert every 30 minutes all night\nconst sd = $getWorkflowStaticData('global');\nconst now = Date.now();\nif (sd.lastAlertTs && (now - sd.lastAlertTs) / 60000 < COOLDOWN_MINUTES) return [];\nsd.lastAlertTs = now;\n\nconst label = score <= 20 ? 'Extreme Fear' : 'Fear';\n\n// CNN's 7 component indicators (score + rating; the mirror has no equivalent)\nlet breakdown = '  (Component breakdown not available)';\nif (sourceName === 'CNN') {\n  const comps = [\n    ['Market Momentum (S&P500)', 'market_momentum_sp500'],\n    ['Stock Price Strength',     'stock_price_strength'],\n    ['Stock Price Breadth',      'stock_price_breadth'],\n    ['Put/Call Options',         'put_call_options'],\n    ['Market Volatility (VIX)',  'market_volatility_vix'],\n    ['Junk Bond Demand',         'junk_bond_demand'],\n    ['Safe Haven Demand',        'safe_haven_demand'],\n  ];\n  const lines = comps.map(([n, k]) => {\n    const c = cnn[k];\n    return c && typeof c.score === 'number'\n      ? `  • ${n}: ${Math.round(c.score)}/100 (${c.rating || '?'})` : null;\n  }).filter(Boolean);\n  if (lines.length) breakdown = lines.join('\\n');\n}\n\nconst sgtTime = $('Window Check').first().json.sgtTime;\n\nconst text = [\n  '🚨 EXTREME FEAR ALERT 🚨',\n  '',\n  `📊 Fear & Greed Index: ${score} (${label})`,\n  `🕐 Checked at: ${sgtTime}`,\n  '',\n  '📉 Component Breakdown:',\n  breakdown,\n  '',\n  `⚠️ Index is below ${THRESHOLD} — market in extreme fear territory.`,\n  '',\n  `Source: ${sourceName}`,\n].join('\\n');\n\nreturn [{ json: { text } }];\n"
+      },
+      "id": "9c5bd172-5aec-4519-a1b6-60e2fce9a570",
+      "name": "Evaluate Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "REPLACE_WITH_CHAT_ID",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "d952e5e5-ed0c-4d05-a684-b98bea379419",
+      "name": "Send Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        460,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Alert Schedule": {
+      "main": [
+        [
+          {
+            "node": "Window Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Window Check": {
+      "main": [
+        [
+          {
+            "node": "Fetch CNN",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch CNN": {
+      "main": [
+        [
+          {
+            "node": "Fetch Mirror",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Mirror": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Alert": {
+      "main": [
+        [
+          {
+            "node": "Send Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Singapore"
+  },
+  "pinData": {}
+}
