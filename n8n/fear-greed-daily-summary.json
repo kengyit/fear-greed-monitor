@@ -158,9 +158,10 @@
         "url": "=https://query1.finance.yahoo.com/v8/finance/chart/{{ $json.symbol }}?interval=1d&range=1d",
         "options": {
           "timeout": 20000,
-          "response": {
-            "response": {
-              "neverError": true
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 2000
             }
           }
         },
@@ -182,7 +183,10 @@
         460,
         0
       ],
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
     },
     {
       "parameters": {
@@ -202,12 +206,26 @@
         "url": "=https://fred.stlouisfed.org/graph/fredgraph.csv?id={{ $json.series }}",
         "options": {
           "timeout": 20000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 2000
+            }
+          },
           "response": {
             "response": {
-              "neverError": true,
               "responseFormat": "text"
             }
           }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            }
+          ]
         }
       },
       "id": "b38f3495-0474-4e32-aaef-a3d88312f3b5",
@@ -218,7 +236,10 @@
         900,
         0
       ],
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
     },
     {
       "parameters": {
