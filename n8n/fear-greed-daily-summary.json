@@ -12,7 +12,7 @@
           ]
         }
       },
-      "id": "b1bcf3d9-ac78-4dbe-a884-a61d693c8177",
+      "id": "8bdaed17-ab04-44b9-b603-cd9915b84938",
       "name": "Daily Schedule",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
@@ -29,7 +29,7 @@
         ],
         "additionalFields": {}
       },
-      "id": "cfa71b75-3d09-4b47-9a94-f047680d2946",
+      "id": "d843779c-fc52-41f5-a9e8-901ef64c0d7b",
       "name": "Refresh Trigger",
       "type": "n8n-nodes-base.telegramTrigger",
       "typeVersion": 1.1,
@@ -37,13 +37,13 @@
         -860,
         120
       ],
-      "webhookId": "4ad625e5-cc42-47ef-82f0-8975bd038af0"
+      "webhookId": "23d361e7-f787-4efa-801f-c537d7bf88b5"
     },
     {
       "parameters": {
         "jsCode": "// Only honor the 🔄 button / /refresh command from the configured chat\nconst CHAT_ID = 'REPLACE_WITH_CHAT_ID';\n\nconst u = $json;\nconst cb = u.callback_query;\nif (cb && cb.data === 'fgi_refresh' && String(cb.from && cb.from.id) === CHAT_ID) {\n  return [{ json: { callbackId: cb.id } }];\n}\nconst msg = u.message;\nif (msg && String(msg.chat && msg.chat.id) === CHAT_ID\n    && ['/refresh', '/now'].includes(String(msg.text || '').trim())) {\n  return [{ json: { callbackId: '' } }];\n}\nreturn [];\n"
       },
-      "id": "58825e5a-efce-4ca1-bbf4-155ba7c8f5d1",
+      "id": "5ac1a8e3-02f8-4eef-a297-8173358855f1",
       "name": "Filter Refresh",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -61,7 +61,7 @@
           "text": "Refreshing — pulling latest data…"
         }
       },
-      "id": "02f8f8ed-9fde-4a37-b9c4-4c18438c70f0",
+      "id": "17d6ccce-0202-43aa-b854-1667afa990c8",
       "name": "Answer Callback",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
@@ -108,7 +108,7 @@
           ]
         }
       },
-      "id": "3fe05111-3ddf-422d-98b4-bb6ce37ad442",
+      "id": "a95b8020-8c8d-4b29-9a8e-f2bac097a256",
       "name": "Fetch CNN",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -130,62 +130,12 @@
           }
         }
       },
-      "id": "6fa43436-5298-46e3-b00c-d5192100f72c",
+      "id": "5510f6cf-a099-4f6a-93b0-e2b9b6a0b427",
       "name": "Fetch Mirror",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
         20,
-        0
-      ],
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Stooq symbols for the daily snapshot (runs once regardless of input)\nreturn [\n  { json: { name: 'S&P500',  symbol: '%5Espx'  } },\n  { json: { name: 'Nasdaq',  symbol: '%5Endq'  } },\n  { json: { name: 'HSI',     symbol: '%5Ehsi'  } },\n  { json: { name: 'Bitcoin', symbol: 'btcusd' } },\n].slice(0, 4);\n"
-      },
-      "id": "33dbce48-e3fb-4560-957c-7ba55033169e",
-      "name": "Quote Symbols",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        240,
-        0
-      ]
-    },
-    {
-      "parameters": {
-        "url": "=https://stooq.com/q/d/l/?s={{ $json.symbol }}&d1={{ $now.minus({ days: 30 }).toFormat('yyyyMMdd') }}&d2={{ $now.toFormat('yyyyMMdd') }}&i=d",
-        "options": {
-          "timeout": 30000,
-          "response": {
-            "response": {
-              "responseFormat": "text"
-            }
-          },
-          "batching": {
-            "batch": {
-              "batchSize": 1,
-              "batchInterval": 1000
-            }
-          }
-        },
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "User-Agent",
-              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-            }
-          ]
-        }
-      },
-      "id": "c1a26764-80b4-4ef1-b16a-803a6ed15c78",
-      "name": "Fetch Quotes",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        460,
         0
       ],
       "onError": "continueRegularOutput",
@@ -195,14 +145,9 @@
     },
     {
       "parameters": {
-        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS,CPIAUCSL,UNRATE",
+        "url": "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true",
         "options": {
-          "timeout": 60000,
-          "response": {
-            "response": {
-              "responseFormat": "text"
-            }
-          }
+          "timeout": 30000
         },
         "sendHeaders": true,
         "headerParameters": {
@@ -210,16 +155,53 @@
             {
               "name": "User-Agent",
               "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
             }
           ]
         }
       },
-      "id": "748bb72d-ba69-4b43-a04f-9e0954440666",
-      "name": "Fetch FRED",
+      "id": "d657ca05-b473-4199-92db-56b8e3209cc6",
+      "name": "Fetch BTC",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        680,
+        240,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 4000
+    },
+    {
+      "parameters": {
+        "url": "https://api.db.nomics.world/v22/series?series_ids=FED/H15/RIFSPFF_N.M,BLS/cu/CUUR0000SA0,BLS/ln/LNS14000000&observations=1&format=json",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        }
+      },
+      "id": "66cf6704-55da-4587-81f6-09467aafa0aa",
+      "name": "Fetch Macro",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
         0
       ],
       "onError": "continueRegularOutput",
@@ -249,26 +231,26 @@
           ]
         }
       },
-      "id": "bbdd9546-2a88-47d6-8377-d432811f776d",
+      "id": "ee24fd23-e776-4f63-8d48-1da277d225be",
       "name": "Fetch News",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        900,
+        680,
         0
       ],
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "// Assemble the Daily Fear & Greed Update message (Telegram HTML).\n// Every data source is a SINGLE http request (datacenter IPs get\n// tarpitted on rapid repeat requests); every line is best-effort and\n// renders \"n/a\" when its source failed.\n\nconst esc = (s) => String(s)\n  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst commas = (n) => Math.round(n).toLocaleString('en-US');\nconst first = (name) => { try { return $(name).first().json; } catch (e) { return null; } };\n\n// ── Fear & Greed score: CNN primary, mirror fallback ──\nlet score = null;\nlet sourceName = 'CNN';\nconst cnn = first('Fetch CNN');\nif (cnn && cnn.fear_and_greed && typeof cnn.fear_and_greed.score === 'number') {\n  score = Math.round(cnn.fear_and_greed.score);\n} else {\n  const mirror = first('Fetch Mirror');\n  let raw = null;\n  if (mirror && mirror.score != null) {\n    raw = typeof mirror.score === 'number' ? mirror.score\n        : (typeof mirror.score.score === 'number' ? mirror.score.score : null);\n  }\n  if (raw !== null) { score = Math.round(raw); sourceName = 'feargreedchart.com'; }\n}\nif (score === null) throw new Error('Could not fetch the Fear & Greed score from CNN or the mirror');\n\nconst label = score <= 20 ? 'Extreme Fear' : score <= 40 ? 'Fear'\n            : score <= 60 ? 'Neutral' : score <= 80 ? 'Greed' : 'Extreme Greed';\n\n// ── Day-over-day change vs the last scheduled 21:35 send ──\nconst sd = $getWorkflowStaticData('global');\nlet deltaNote = '';\nif (typeof sd.lastScore === 'number') {\n  const d = score - sd.lastScore;\n  deltaNote = d > 0 ? ` (🟢 +${d})` : d < 0 ? ` (🔴 ${d})` : ' (⚪ 0)';\n}\nlet fromSchedule = false;\ntry { fromSchedule = $('Daily Schedule').isExecuted === true; } catch (e) {}\nif (fromSchedule || typeof sd.lastScore !== 'number') sd.lastScore = score;\n\n// ── SGT timestamp ──\nconst sgtParts = (d, opts) => Object.fromEntries(\n  new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Singapore', hourCycle: 'h23', ...opts })\n    .formatToParts(d).map(x => [x.type, x.value]));\nconst p = sgtParts(new Date(), { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });\nconst sgtDate = `${p.year}-${p.month}-${p.day}`;\nconst sgtTime = `${p.hour}:${p.minute} SGT`;\n\n// ── Index quotes: Stooq daily history (datacenter-friendly), with the\n// mirror's own market block as automatic fallback ──\nconst mirrorData = first('Fetch Mirror');\nconst QUOTES = [\n  { name: 'S&P500',  mirrorKeys: ['^GSPC', '^SPX', 'SPX', 'GSPC', 'SP500'] },\n  { name: 'Nasdaq',  mirrorKeys: ['^IXIC', 'IXIC', '^NDQ', 'NDQ', 'NASDAQ', 'NDX', '^NDX'] },\n  { name: 'HSI',     mirrorKeys: ['^HSI', 'HSI'] },\n  { name: 'Bitcoin', mirrorKeys: ['BTC-USD', 'BTCUSD', 'BTC', 'BITCOIN'] },\n];\nconst qResp = (() => { try { return $('Fetch Quotes').all(); } catch (e) { return []; } })();\nconst stooqQuote = (i) => {\n  // Stooq daily CSV: Date,Open,High,Low,Close,Volume — last two closes\n  const rows = String(qResp[i].json.data).split('\\n').map(r => r.trim())\n    .filter(r => /^\\d{4}-\\d{2}-\\d{2},/.test(r));\n  if (rows.length < 2) throw new Error('no stooq data');\n  const close = (r) => parseFloat(r.split(',')[4]);\n  const price = close(rows[rows.length - 1]);\n  const prev = close(rows[rows.length - 2]);\n  if (!isFinite(price) || !isFinite(prev) || prev === 0) throw new Error('bad stooq data');\n  return { price, pct: ((price - prev) / prev) * 100 };\n};\nconst mirrorMarket = (mirrorData && typeof mirrorData === 'object' && mirrorData.market) || {};\nconst mirrorKeyIndex = {};\nfor (const k of Object.keys(mirrorMarket)) mirrorKeyIndex[k.toUpperCase()] = mirrorMarket[k];\nconst mirrorQuote = (keys) => {\n  for (const k of keys) {\n    const e = mirrorKeyIndex[k.toUpperCase()];\n    if (e && typeof e.price === 'number' && typeof e.pct === 'number') {\n      return { price: e.price, pct: e.pct };\n    }\n  }\n  throw new Error('no mirror quote');\n};\nconst quoteLines = QUOTES.map((q, i) => {\n  let quote = null;\n  try { quote = stooqQuote(i); } catch (e) {}\n  if (!quote) { try { quote = mirrorQuote(q.mirrorKeys); } catch (e) {} }\n  if (!quote) return `  • ${q.name}: n/a`;\n  const dir = quote.pct < 0\n    ? `🔴 -${Math.abs(quote.pct).toFixed(1)}` : `🟢 +${quote.pct.toFixed(1)}`;\n  return `  • ${q.name}: ${commas(quote.price)} (${dir}%)`;\n});\n\n// ── US monthly series: ONE combined FRED CSV (FEDFUNDS,CPIAUCSL,UNRATE) ──\nconst fredDate = (d) => { const [y, m, day] = d.split('-'); return `${+day}/${+m}/${y}`; };\nlet fredHeader = [];\nlet fredRows = [];\ntry {\n  const lines = String(first('Fetch FRED').data).split('\\n').map(r => r.trim()).filter(Boolean);\n  fredHeader = lines[0].split(',').map(h => h.replace(/\"/g, '').trim().toUpperCase());\n  fredRows = lines.slice(1).map(r => r.split(',').map(c => c.replace(/\"/g, '').trim()))\n    .filter(c => /^\\d{4}-\\d{2}-\\d{2}$/.test(c[0]));\n} catch (e) {}\nconst seriesVals = (id) => {\n  const col = fredHeader.indexOf(id);\n  if (col < 1) return [];\n  return fredRows\n    .filter(c => c[col] && c[col] !== '.' && !isNaN(parseFloat(c[col])))\n    .map(c => ({ d: c[0], v: parseFloat(c[col]) }));\n};\nconst levelLine = (labelTxt, id) => {\n  const rows = seriesVals(id);\n  if (rows.length < 2) return `  • ${labelTxt}: n/a`;\n  const cur = rows[rows.length - 1];\n  const last = rows[rows.length - 2];\n  return `  • ${labelTxt}: ${cur.v}% (last: ${last.v}% (as of ${fredDate(last.d)}))`;\n};\nconst yoyLine = (labelTxt, id) => {\n  const rows = seriesVals(id);\n  if (rows.length < 14) return `  • ${labelTxt}: n/a`;\n  const cur = ((rows[rows.length - 1].v / rows[rows.length - 13].v) - 1) * 100;\n  const last = ((rows[rows.length - 2].v / rows[rows.length - 14].v) - 1) * 100;\n  return `  • ${labelTxt}: ${cur.toFixed(1)}% (last: ${last.toFixed(1)}% (as of ${fredDate(rows[rows.length - 2].d)}))`;\n};\nconst fredLines = [\n  levelLine('Interest Rate', 'FEDFUNDS'),\n  yoyLine('CPI', 'CPIAUCSL'),\n  levelLine('Unemployment Rate', 'UNRATE'),\n];\n\n// ── Top 3 headlines with publish time in SGT (CNBC RSS) ──\nlet newsLines = ['      • (news unavailable)'];\ntry {\n  const xml = String(first('Fetch News').data).replace(/[\\r\\n]/g, '');\n  const lines = xml.split('<item>').slice(1, 4).map(part => {\n    let t = (part.match(/<title>(.*?)<\\/title>/) || [])[1] || '';\n    t = t.replace(/<!\\[CDATA\\[|\\]\\]>/g, '')\n         .replace(/&amp;/g, '&').replace(/&#039;|&apos;/g, \"'\").replace(/&quot;/g, '\"').trim();\n    if (!t) return null;\n    let when = '';\n    const pd = (part.match(/<pubDate>(.*?)<\\/pubDate>/) || [])[1];\n    if (pd) {\n      const dt = new Date(pd);\n      if (!isNaN(dt)) {\n        const pp = sgtParts(dt, { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });\n        when = ` (${+pp.day}/${+pp.month}/${pp.year} ${pp.hour}:${pp.minute} SGT)`;\n      }\n    }\n    return `      • ${t}${when}`;\n  }).filter(Boolean);\n  if (lines.length) newsLines = lines;\n} catch (e) {}\n\n// ── Assemble (HTML parse mode: escape data, then add tags) ──\nconst warn = sourceName !== 'CNN' ? ' ⚠️ mirror value, CNN unreachable' : '';\nconst snapshot = [...quoteLines, ...fredLines, '  • Top 3 breaking news:', ...newsLines].join('\\n');\n\nconst text = [\n  '<b><u>📊 Daily Fear &amp; Greed Update</u></b>',\n  '',\n  `📈 Fear &amp; Greed Index: ${score} (${label})${deltaNote}${esc(warn)}`,\n  `📅 ${sgtDate}, ${sgtTime}`,\n  '',\n  '📉 Index:',\n  esc(snapshot),\n].join('\\n');\n\nreturn [{ json: { text, score, label, source: sourceName } }];\n"
+        "jsCode": "// Assemble the Daily Fear & Greed Update message (Telegram HTML).\n// Every data source is a SINGLE http request (datacenter IPs get\n// tarpitted on rapid repeat requests); every line is best-effort and\n// renders \"n/a\" when its source failed.\n\nconst esc = (s) => String(s)\n  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst commas = (n) => Math.round(n).toLocaleString('en-US');\nconst first = (name) => { try { return $(name).first().json; } catch (e) { return null; } };\n\n// ── Fear & Greed score: CNN primary, mirror fallback ──\nlet score = null;\nlet sourceName = 'CNN';\nconst cnn = first('Fetch CNN');\nif (cnn && cnn.fear_and_greed && typeof cnn.fear_and_greed.score === 'number') {\n  score = Math.round(cnn.fear_and_greed.score);\n} else {\n  const mirror = first('Fetch Mirror');\n  let raw = null;\n  if (mirror && mirror.score != null) {\n    raw = typeof mirror.score === 'number' ? mirror.score\n        : (typeof mirror.score.score === 'number' ? mirror.score.score : null);\n  }\n  if (raw !== null) { score = Math.round(raw); sourceName = 'feargreedchart.com'; }\n}\nif (score === null) throw new Error('Could not fetch the Fear & Greed score from CNN or the mirror');\n\nconst label = score <= 20 ? 'Extreme Fear' : score <= 40 ? 'Fear'\n            : score <= 60 ? 'Neutral' : score <= 80 ? 'Greed' : 'Extreme Greed';\n\n// ── Day-over-day change vs the last scheduled 21:35 send ──\nconst sd = $getWorkflowStaticData('global');\nlet deltaNote = '';\nif (typeof sd.lastScore === 'number') {\n  const d = score - sd.lastScore;\n  deltaNote = d > 0 ? ` (🟢 +${d})` : d < 0 ? ` (🔴 ${d})` : ' (⚪ 0)';\n}\nlet fromSchedule = false;\ntry { fromSchedule = $('Daily Schedule').isExecuted === true; } catch (e) {}\nif (fromSchedule || typeof sd.lastScore !== 'number') sd.lastScore = score;\n\n// ── SGT timestamp ──\nconst sgtParts = (d, opts) => Object.fromEntries(\n  new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Singapore', hourCycle: 'h23', ...opts })\n    .formatToParts(d).map(x => [x.type, x.value]));\nconst p = sgtParts(new Date(), { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });\nconst sgtDate = `${p.year}-${p.month}-${p.day}`;\nconst sgtTime = `${p.hour}:${p.minute} SGT`;\n\n// ── Index quotes: the mirror's market block (proven reachable from\n// n8n Cloud) is primary; CoinGecko backs up Bitcoin ──\nconst mirrorData = first('Fetch Mirror');\nconst mirrorMarket = (mirrorData && typeof mirrorData === 'object' && mirrorData.market) || {};\nconst mirrorKeyIndex = {};\nfor (const k of Object.keys(mirrorMarket)) mirrorKeyIndex[k.toUpperCase().replace(/\\s+/g, '')] = mirrorMarket[k];\nconst mirrorQuote = (keys) => {\n  for (const k of keys) {\n    const e = mirrorKeyIndex[k];\n    if (!e) continue;\n    const price = Number(e.price);\n    const pct = Number(e.pct);\n    if (isFinite(price) && isFinite(pct)) return { price, pct };\n  }\n  return null;\n};\nconst geckoQuote = () => {\n  try {\n    const b = first('Fetch BTC').bitcoin;\n    const price = Number(b.usd);\n    const pct = Number(b.usd_24h_change);\n    if (isFinite(price) && isFinite(pct)) return { price, pct };\n  } catch (e) {}\n  return null;\n};\nconst QUOTES = [\n  { name: 'S&P500',  keys: ['^GSPC', 'GSPC', '^SPX', 'SPX', 'SP500', 'S&P500', 'S&P', 'SPY'] },\n  { name: 'Nasdaq',  keys: ['^IXIC', 'IXIC', 'NASDAQ', '^NDQ', 'NDQ', '^NDX', 'NDX', 'COMP'] },\n  { name: 'HSI',     keys: ['^HSI', 'HSI', 'HANGSENG', 'HK50'] },\n  { name: 'Bitcoin', keys: ['BTC-USD', 'BTCUSD', 'BTC', 'BITCOIN', 'XBTUSD'], extra: geckoQuote },\n];\nconst quoteLines = QUOTES.map((q) => {\n  let quote = mirrorQuote(q.keys);\n  if (!quote && q.extra) quote = q.extra();\n  if (!quote) return `  • ${q.name}: n/a`;\n  const dir = quote.pct < 0\n    ? `🔴 -${Math.abs(quote.pct).toFixed(1)}` : `🟢 +${quote.pct.toFixed(1)}`;\n  return `  • ${q.name}: ${commas(quote.price)} (${dir}%)`;\n});\n\n// ── US monthly series via DBnomics (open data API, no key):\n// FED/H15 effective fed funds, BLS CPI-U index, BLS unemployment rate ──\nlet macroDocs = [];\ntry { macroDocs = first('Fetch Macro').series.docs || []; } catch (e) {}\nconst findDoc = (frag) => macroDocs.find(d =>\n  String(d.series_code || '').toUpperCase().includes(frag));\nconst docRows = (doc) => {\n  if (!doc || !Array.isArray(doc.period) || !Array.isArray(doc.value)) return [];\n  const out = [];\n  for (let i = 0; i < doc.period.length; i++) {\n    const v = Number(doc.value[i]);\n    if (isFinite(v)) out.push({ d: String(doc.period[i]), v });\n  }\n  return out;\n};\nconst perDate = (pd) => { const [y, m] = pd.split('-'); return `1/${+m}/${y}`; };\nconst levelLine = (labelTxt, frag) => {\n  const rows = docRows(findDoc(frag));\n  if (rows.length < 2) return `  • ${labelTxt}: n/a`;\n  const cur = rows[rows.length - 1];\n  const last = rows[rows.length - 2];\n  return `  • ${labelTxt}: ${cur.v}% (last: ${last.v}% (as of ${perDate(last.d)}))`;\n};\nconst yoyLine = (labelTxt, frag) => {\n  const rows = docRows(findDoc(frag));\n  if (rows.length < 14) return `  • ${labelTxt}: n/a`;\n  const cur = ((rows[rows.length - 1].v / rows[rows.length - 13].v) - 1) * 100;\n  const last = ((rows[rows.length - 2].v / rows[rows.length - 14].v) - 1) * 100;\n  return `  • ${labelTxt}: ${cur.toFixed(1)}% (last: ${last.toFixed(1)}% (as of ${perDate(rows[rows.length - 2].d)}))`;\n};\nconst fredLines = [\n  levelLine('Interest Rate', 'RIFSPFF'),\n  yoyLine('CPI', 'CUUR0000SA0'),\n  levelLine('Unemployment Rate', 'LNS14000000'),\n];\n\n// ── Top 3 headlines with publish time in SGT (CNBC RSS) ──\nlet newsLines = ['      • (news unavailable)'];\ntry {\n  const xml = String(first('Fetch News').data).replace(/[\\r\\n]/g, '');\n  const lines = xml.split('<item>').slice(1, 4).map(part => {\n    let t = (part.match(/<title>(.*?)<\\/title>/) || [])[1] || '';\n    t = t.replace(/<!\\[CDATA\\[|\\]\\]>/g, '')\n         .replace(/&amp;/g, '&').replace(/&#039;|&apos;/g, \"'\").replace(/&quot;/g, '\"').trim();\n    if (!t) return null;\n    let when = '';\n    const pd = (part.match(/<pubDate>(.*?)<\\/pubDate>/) || [])[1];\n    if (pd) {\n      const dt = new Date(pd);\n      if (!isNaN(dt)) {\n        const pp = sgtParts(dt, { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });\n        when = ` (${+pp.day}/${+pp.month}/${pp.year} ${pp.hour}:${pp.minute} SGT)`;\n      }\n    }\n    return `      • ${t}${when}`;\n  }).filter(Boolean);\n  if (lines.length) newsLines = lines;\n} catch (e) {}\n\n// ── Assemble (HTML parse mode: escape data, then add tags) ──\nconst warn = sourceName !== 'CNN' ? ' ⚠️ mirror value, CNN unreachable' : '';\nconst snapshot = [...quoteLines, ...fredLines, '  • Top 3 breaking news:', ...newsLines].join('\\n');\n\nconst text = [\n  '<b><u>📊 Daily Fear &amp; Greed Update</u></b>',\n  '',\n  `📈 Fear &amp; Greed Index: ${score} (${label})${deltaNote}${esc(warn)}`,\n  `📅 ${sgtDate}, ${sgtTime}`,\n  '',\n  '📉 Index:',\n  esc(snapshot),\n].join('\\n');\n\nreturn [{ json: { text, score, label, source: sourceName } }];\n"
       },
-      "id": "2e30ad7d-50d7-4d04-b957-5eeb4cb3f637",
+      "id": "079efa12-2ab4-4bbf-8b46-402fe180b266",
       "name": "Build Summary",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1120,
+        900,
         0
       ]
     },
@@ -298,12 +280,12 @@
           "appendAttribution": false
         }
       },
-      "id": "edcf6026-28e6-4621-967a-1b8cf8daa7b4",
+      "id": "0f6d1424-82f9-4410-a91e-71ca86df1a62",
       "name": "Send Summary",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        1340,
+        1120,
         0
       ]
     }
@@ -324,36 +306,25 @@
       "main": [
         [
           {
-            "node": "Quote Symbols",
+            "node": "Fetch BTC",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Quote Symbols": {
+    "Fetch BTC": {
       "main": [
         [
           {
-            "node": "Fetch Quotes",
+            "node": "Fetch Macro",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Fetch Quotes": {
-      "main": [
-        [
-          {
-            "node": "Fetch FRED",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Fetch FRED": {
+    "Fetch Macro": {
       "main": [
         [
           {
