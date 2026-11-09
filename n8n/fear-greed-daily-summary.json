@@ -12,7 +12,7 @@
           ]
         }
       },
-      "id": "8bdaed17-ab04-44b9-b603-cd9915b84938",
+      "id": "f9bde4be-28a0-42d0-af74-54c6038f7940",
       "name": "Daily Schedule",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
@@ -29,7 +29,7 @@
         ],
         "additionalFields": {}
       },
-      "id": "d843779c-fc52-41f5-a9e8-901ef64c0d7b",
+      "id": "19062f58-382f-40a8-a0fc-191c08aa6e9a",
       "name": "Refresh Trigger",
       "type": "n8n-nodes-base.telegramTrigger",
       "typeVersion": 1.1,
@@ -37,13 +37,13 @@
         -860,
         120
       ],
-      "webhookId": "23d361e7-f787-4efa-801f-c537d7bf88b5"
+      "webhookId": "e731ffd4-12f3-4916-9774-b91140040918"
     },
     {
       "parameters": {
         "jsCode": "// Only honor the 🔄 button / /refresh command from the configured chat\nconst CHAT_ID = 'REPLACE_WITH_CHAT_ID';\n\nconst u = $json;\nconst cb = u.callback_query;\nif (cb && cb.data === 'fgi_refresh' && String(cb.from && cb.from.id) === CHAT_ID) {\n  return [{ json: { callbackId: cb.id } }];\n}\nconst msg = u.message;\nif (msg && String(msg.chat && msg.chat.id) === CHAT_ID\n    && ['/refresh', '/now'].includes(String(msg.text || '').trim())) {\n  return [{ json: { callbackId: '' } }];\n}\nreturn [];\n"
       },
-      "id": "5ac1a8e3-02f8-4eef-a297-8173358855f1",
+      "id": "2a12ba9e-6125-445a-8116-a4cec193913c",
       "name": "Filter Refresh",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -61,7 +61,7 @@
           "text": "Refreshing — pulling latest data…"
         }
       },
-      "id": "17d6ccce-0202-43aa-b854-1667afa990c8",
+      "id": "44a3b0b1-636c-4030-ac0a-1195f3d037ab",
       "name": "Answer Callback",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
@@ -108,7 +108,7 @@
           ]
         }
       },
-      "id": "a95b8020-8c8d-4b29-9a8e-f2bac097a256",
+      "id": "960e6fbc-4307-4c6b-b263-2b8e776cfcf0",
       "name": "Fetch CNN",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -130,12 +130,49 @@
           }
         }
       },
-      "id": "5510f6cf-a099-4f6a-93b0-e2b9b6a0b427",
+      "id": "d4a53cf7-3e81-47a2-b607-b857e628330e",
       "name": "Fetch Mirror",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
         20,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 4000
+    },
+    {
+      "parameters": {
+        "url": "https://scanner.tradingview.com/global/scan",
+        "options": {
+          "timeout": 30000
+        },
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"symbols\":{\"tickers\":[\"SP:SPX\",\"NASDAQ:IXIC\",\"TVC:HSI\",\"BITSTAMP:BTCUSD\"]},\"columns\":[\"close\",\"change\"]}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        }
+      },
+      "id": "d2823077-ebeb-4a3c-97b3-62df195fc779",
+      "name": "Fetch Quotes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
         0
       ],
       "onError": "continueRegularOutput",
@@ -163,12 +200,12 @@
           ]
         }
       },
-      "id": "d657ca05-b473-4199-92db-56b8e3209cc6",
+      "id": "4ca7c294-27f2-47c1-86a4-2b98958de285",
       "name": "Fetch BTC",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        240,
+        460,
         0
       ],
       "onError": "continueRegularOutput",
@@ -178,7 +215,7 @@
     },
     {
       "parameters": {
-        "url": "https://api.db.nomics.world/v22/series?series_ids=FED/H15/RIFSPFF_N.M,BLS/cu/CUUR0000SA0,BLS/ln/LNS14000000&observations=1&format=json",
+        "url": "https://api.db.nomics.world/v22/series?series_ids=FED/H15/RIFSPFF_N.M&observations=1&format=json",
         "options": {
           "timeout": 30000
         },
@@ -196,12 +233,49 @@
           ]
         }
       },
-      "id": "66cf6704-55da-4587-81f6-09467aafa0aa",
+      "id": "c84746f7-7075-4f9e-b67d-682e2f59cdf4",
       "name": "Fetch Macro",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        460,
+        680,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 4000
+    },
+    {
+      "parameters": {
+        "url": "https://api.bls.gov/publicAPI/v2/timeseries/data/",
+        "options": {
+          "timeout": 30000
+        },
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"seriesid\":[\"CUUR0000SA0\",\"LNS14000000\"],\"startyear\":\"{{ $now.minus({ years: 2 }).toFormat('yyyy') }}\",\"endyear\":\"{{ $now.toFormat('yyyy') }}\"}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        }
+      },
+      "id": "b74354c6-f273-4742-a721-7334693db472",
+      "name": "Fetch BLS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
         0
       ],
       "onError": "continueRegularOutput",
@@ -231,26 +305,26 @@
           ]
         }
       },
-      "id": "ee24fd23-e776-4f63-8d48-1da277d225be",
+      "id": "8bc22f66-9abb-4e01-b953-5c4d656a4151",
       "name": "Fetch News",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        680,
+        1120,
         0
       ],
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "// Assemble the Daily Fear & Greed Update message (Telegram HTML).\n// Every data source is a SINGLE http request (datacenter IPs get\n// tarpitted on rapid repeat requests); every line is best-effort and\n// renders \"n/a\" when its source failed.\n\nconst esc = (s) => String(s)\n  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst commas = (n) => Math.round(n).toLocaleString('en-US');\nconst first = (name) => { try { return $(name).first().json; } catch (e) { return null; } };\n\n// ── Fear & Greed score: CNN primary, mirror fallback ──\nlet score = null;\nlet sourceName = 'CNN';\nconst cnn = first('Fetch CNN');\nif (cnn && cnn.fear_and_greed && typeof cnn.fear_and_greed.score === 'number') {\n  score = Math.round(cnn.fear_and_greed.score);\n} else {\n  const mirror = first('Fetch Mirror');\n  let raw = null;\n  if (mirror && mirror.score != null) {\n    raw = typeof mirror.score === 'number' ? mirror.score\n        : (typeof mirror.score.score === 'number' ? mirror.score.score : null);\n  }\n  if (raw !== null) { score = Math.round(raw); sourceName = 'feargreedchart.com'; }\n}\nif (score === null) throw new Error('Could not fetch the Fear & Greed score from CNN or the mirror');\n\nconst label = score <= 20 ? 'Extreme Fear' : score <= 40 ? 'Fear'\n            : score <= 60 ? 'Neutral' : score <= 80 ? 'Greed' : 'Extreme Greed';\n\n// ── Day-over-day change vs the last scheduled 21:35 send ──\nconst sd = $getWorkflowStaticData('global');\nlet deltaNote = '';\nif (typeof sd.lastScore === 'number') {\n  const d = score - sd.lastScore;\n  deltaNote = d > 0 ? ` (🟢 +${d})` : d < 0 ? ` (🔴 ${d})` : ' (⚪ 0)';\n}\nlet fromSchedule = false;\ntry { fromSchedule = $('Daily Schedule').isExecuted === true; } catch (e) {}\nif (fromSchedule || typeof sd.lastScore !== 'number') sd.lastScore = score;\n\n// ── SGT timestamp ──\nconst sgtParts = (d, opts) => Object.fromEntries(\n  new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Singapore', hourCycle: 'h23', ...opts })\n    .formatToParts(d).map(x => [x.type, x.value]));\nconst p = sgtParts(new Date(), { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });\nconst sgtDate = `${p.year}-${p.month}-${p.day}`;\nconst sgtTime = `${p.hour}:${p.minute} SGT`;\n\n// ── Index quotes: the mirror's market block (proven reachable from\n// n8n Cloud) is primary; CoinGecko backs up Bitcoin ──\nconst mirrorData = first('Fetch Mirror');\nconst mirrorMarket = (mirrorData && typeof mirrorData === 'object' && mirrorData.market) || {};\nconst mirrorKeyIndex = {};\nfor (const k of Object.keys(mirrorMarket)) mirrorKeyIndex[k.toUpperCase().replace(/\\s+/g, '')] = mirrorMarket[k];\nconst mirrorQuote = (keys) => {\n  for (const k of keys) {\n    const e = mirrorKeyIndex[k];\n    if (!e) continue;\n    const price = Number(e.price);\n    const pct = Number(e.pct);\n    if (isFinite(price) && isFinite(pct)) return { price, pct };\n  }\n  return null;\n};\nconst geckoQuote = () => {\n  try {\n    const b = first('Fetch BTC').bitcoin;\n    const price = Number(b.usd);\n    const pct = Number(b.usd_24h_change);\n    if (isFinite(price) && isFinite(pct)) return { price, pct };\n  } catch (e) {}\n  return null;\n};\nconst QUOTES = [\n  { name: 'S&P500',  keys: ['^GSPC', 'GSPC', '^SPX', 'SPX', 'SP500', 'S&P500', 'S&P', 'SPY'] },\n  { name: 'Nasdaq',  keys: ['^IXIC', 'IXIC', 'NASDAQ', '^NDQ', 'NDQ', '^NDX', 'NDX', 'COMP'] },\n  { name: 'HSI',     keys: ['^HSI', 'HSI', 'HANGSENG', 'HK50'] },\n  { name: 'Bitcoin', keys: ['BTC-USD', 'BTCUSD', 'BTC', 'BITCOIN', 'XBTUSD'], extra: geckoQuote },\n];\nconst quoteLines = QUOTES.map((q) => {\n  let quote = mirrorQuote(q.keys);\n  if (!quote && q.extra) quote = q.extra();\n  if (!quote) return `  • ${q.name}: n/a`;\n  const dir = quote.pct < 0\n    ? `🔴 -${Math.abs(quote.pct).toFixed(1)}` : `🟢 +${quote.pct.toFixed(1)}`;\n  return `  • ${q.name}: ${commas(quote.price)} (${dir}%)`;\n});\n\n// ── US monthly series via DBnomics (open data API, no key):\n// FED/H15 effective fed funds, BLS CPI-U index, BLS unemployment rate ──\nlet macroDocs = [];\ntry { macroDocs = first('Fetch Macro').series.docs || []; } catch (e) {}\nconst findDoc = (frag) => macroDocs.find(d =>\n  String(d.series_code || '').toUpperCase().includes(frag));\nconst docRows = (doc) => {\n  if (!doc || !Array.isArray(doc.period) || !Array.isArray(doc.value)) return [];\n  const out = [];\n  for (let i = 0; i < doc.period.length; i++) {\n    const v = Number(doc.value[i]);\n    if (isFinite(v)) out.push({ d: String(doc.period[i]), v });\n  }\n  return out;\n};\nconst perDate = (pd) => { const [y, m] = pd.split('-'); return `1/${+m}/${y}`; };\nconst levelLine = (labelTxt, frag) => {\n  const rows = docRows(findDoc(frag));\n  if (rows.length < 2) return `  • ${labelTxt}: n/a`;\n  const cur = rows[rows.length - 1];\n  const last = rows[rows.length - 2];\n  return `  • ${labelTxt}: ${cur.v}% (last: ${last.v}% (as of ${perDate(last.d)}))`;\n};\nconst yoyLine = (labelTxt, frag) => {\n  const rows = docRows(findDoc(frag));\n  if (rows.length < 14) return `  • ${labelTxt}: n/a`;\n  const cur = ((rows[rows.length - 1].v / rows[rows.length - 13].v) - 1) * 100;\n  const last = ((rows[rows.length - 2].v / rows[rows.length - 14].v) - 1) * 100;\n  return `  • ${labelTxt}: ${cur.toFixed(1)}% (last: ${last.toFixed(1)}% (as of ${perDate(rows[rows.length - 2].d)}))`;\n};\nconst fredLines = [\n  levelLine('Interest Rate', 'RIFSPFF'),\n  yoyLine('CPI', 'CUUR0000SA0'),\n  levelLine('Unemployment Rate', 'LNS14000000'),\n];\n\n// ── Top 3 headlines with publish time in SGT (CNBC RSS) ──\nlet newsLines = ['      • (news unavailable)'];\ntry {\n  const xml = String(first('Fetch News').data).replace(/[\\r\\n]/g, '');\n  const lines = xml.split('<item>').slice(1, 4).map(part => {\n    let t = (part.match(/<title>(.*?)<\\/title>/) || [])[1] || '';\n    t = t.replace(/<!\\[CDATA\\[|\\]\\]>/g, '')\n         .replace(/&amp;/g, '&').replace(/&#039;|&apos;/g, \"'\").replace(/&quot;/g, '\"').trim();\n    if (!t) return null;\n    let when = '';\n    const pd = (part.match(/<pubDate>(.*?)<\\/pubDate>/) || [])[1];\n    if (pd) {\n      const dt = new Date(pd);\n      if (!isNaN(dt)) {\n        const pp = sgtParts(dt, { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });\n        when = ` (${+pp.day}/${+pp.month}/${pp.year} ${pp.hour}:${pp.minute} SGT)`;\n      }\n    }\n    return `      • ${t}${when}`;\n  }).filter(Boolean);\n  if (lines.length) newsLines = lines;\n} catch (e) {}\n\n// ── Assemble (HTML parse mode: escape data, then add tags) ──\nconst warn = sourceName !== 'CNN' ? ' ⚠️ mirror value, CNN unreachable' : '';\nconst snapshot = [...quoteLines, ...fredLines, '  • Top 3 breaking news:', ...newsLines].join('\\n');\n\nconst text = [\n  '<b><u>📊 Daily Fear &amp; Greed Update</u></b>',\n  '',\n  `📈 Fear &amp; Greed Index: ${score} (${label})${deltaNote}${esc(warn)}`,\n  `📅 ${sgtDate}, ${sgtTime}`,\n  '',\n  '📉 Index:',\n  esc(snapshot),\n].join('\\n');\n\nreturn [{ json: { text, score, label, source: sourceName } }];\n"
+        "jsCode": "// Assemble the Daily Fear & Greed Update message (Telegram HTML).\n// Every data source is a SINGLE http request (datacenter IPs get\n// tarpitted on rapid repeat requests); every line is best-effort and\n// renders \"n/a\" when its source failed.\n\nconst esc = (s) => String(s)\n  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst commas = (n) => Math.round(n).toLocaleString('en-US');\nconst first = (name) => { try { return $(name).first().json; } catch (e) { return null; } };\n\n// ── Fear & Greed score: CNN primary, mirror fallback ──\nlet score = null;\nlet sourceName = 'CNN';\nconst cnn = first('Fetch CNN');\nif (cnn && cnn.fear_and_greed && typeof cnn.fear_and_greed.score === 'number') {\n  score = Math.round(cnn.fear_and_greed.score);\n} else {\n  const mirror = first('Fetch Mirror');\n  let raw = null;\n  if (mirror && mirror.score != null) {\n    raw = typeof mirror.score === 'number' ? mirror.score\n        : (typeof mirror.score.score === 'number' ? mirror.score.score : null);\n  }\n  if (raw !== null) { score = Math.round(raw); sourceName = 'feargreedchart.com'; }\n}\nif (score === null) throw new Error('Could not fetch the Fear & Greed score from CNN or the mirror');\n\nconst label = score <= 20 ? 'Extreme Fear' : score <= 40 ? 'Fear'\n            : score <= 60 ? 'Neutral' : score <= 80 ? 'Greed' : 'Extreme Greed';\n\n// ── Day-over-day change vs the last scheduled 21:35 send ──\nconst sd = $getWorkflowStaticData('global');\nlet deltaNote = '';\nif (typeof sd.lastScore === 'number') {\n  const d = score - sd.lastScore;\n  deltaNote = d > 0 ? ` (🟢 +${d})` : d < 0 ? ` (🔴 ${d})` : ' (⚪ 0)';\n}\nlet fromSchedule = false;\ntry { fromSchedule = $('Daily Schedule').isExecuted === true; } catch (e) {}\nif (fromSchedule || typeof sd.lastScore !== 'number') sd.lastScore = score;\n\n// ── SGT timestamp ──\nconst sgtParts = (d, opts) => Object.fromEntries(\n  new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Singapore', hourCycle: 'h23', ...opts })\n    .formatToParts(d).map(x => [x.type, x.value]));\nconst p = sgtParts(new Date(), { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });\nconst sgtDate = `${p.year}-${p.month}-${p.day}`;\nconst sgtTime = `${p.hour}:${p.minute} SGT`;\n\n// ── Index quotes: TradingView scanner (real index levels) primary;\n// the mirror's market block and CoinGecko as fallbacks ──\nlet tvMap = {};\ntry {\n  for (const r of (first('Fetch Quotes').data || [])) {\n    if (r && r.s && Array.isArray(r.d)) tvMap[String(r.s).toUpperCase()] = r.d;\n  }\n} catch (e) {}\nconst tvQuote = (ticks) => {\n  for (const t of ticks) {\n    const d = tvMap[t.toUpperCase()];\n    if (!d) continue;\n    const price = Number(d[0]);\n    const pct = Number(d[1]);\n    if (isFinite(price) && isFinite(pct)) return { price, pct };\n  }\n  return null;\n};\nconst mirrorData = first('Fetch Mirror');\nconst mirrorMarket = (mirrorData && typeof mirrorData === 'object' && mirrorData.market) || {};\nconst mirrorKeyIndex = {};\nfor (const k of Object.keys(mirrorMarket)) mirrorKeyIndex[k.toUpperCase().replace(/\\s+/g, '')] = mirrorMarket[k];\nconst mirrorQuote = (keys) => {\n  for (const k of keys) {\n    const e = mirrorKeyIndex[k];\n    if (!e) continue;\n    const price = Number(e.price);\n    const pct = Number(e.pct);\n    if (isFinite(price) && isFinite(pct)) return { price, pct };\n  }\n  return null;\n};\nconst geckoQuote = () => {\n  try {\n    const b = first('Fetch BTC').bitcoin;\n    const price = Number(b.usd);\n    const pct = Number(b.usd_24h_change);\n    if (isFinite(price) && isFinite(pct)) return { price, pct };\n  } catch (e) {}\n  return null;\n};\n// Mirror keys are index symbols ONLY — ETF proxies (SPY/QQQ/DIA) show\n// the fund price, not the index level, and must never be used\nconst QUOTES = [\n  { name: 'S&P500',  tv: ['SP:SPX'],          keys: ['^GSPC', 'GSPC', '^SPX', 'SPX', 'SP500'] },\n  { name: 'Nasdaq',  tv: ['NASDAQ:IXIC'],     keys: ['^IXIC', 'IXIC', 'NASDAQ', 'COMP'] },\n  { name: 'HSI',     tv: ['TVC:HSI', 'HSI:HSI'], keys: ['^HSI', 'HSI', 'HANGSENG', 'HK50'] },\n  { name: 'Bitcoin', tv: ['BITSTAMP:BTCUSD'], keys: ['BTC-USD', 'BTCUSD', 'BTC', 'BITCOIN'], extra: geckoQuote },\n];\nconst quoteLines = QUOTES.map((q) => {\n  let quote = tvQuote(q.tv);\n  if (!quote) quote = mirrorQuote(q.keys);\n  if (!quote && q.extra) quote = q.extra();\n  if (!quote) return `  • ${q.name}: n/a`;\n  const dir = quote.pct < 0\n    ? `🔴 -${Math.abs(quote.pct).toFixed(1)}` : `🟢 +${quote.pct.toFixed(1)}`;\n  return `  • ${q.name}: ${commas(quote.price)} (${dir}%)`;\n});\n\n// ── US monthly series: fed funds via DBnomics (FED/H15), CPI and\n// unemployment via the official BLS public API (fresher than mirrors) ──\nlet macroDocs = [];\ntry { macroDocs = first('Fetch Macro').series.docs || []; } catch (e) {}\nconst findDoc = (frag) => macroDocs.find(d =>\n  String(d.series_code || '').toUpperCase().includes(frag));\nconst docRows = (doc) => {\n  if (!doc || !Array.isArray(doc.period) || !Array.isArray(doc.value)) return [];\n  const out = [];\n  for (let i = 0; i < doc.period.length; i++) {\n    const v = Number(doc.value[i]);\n    if (isFinite(v)) out.push({ d: String(doc.period[i]), v });\n  }\n  return out;\n};\nlet blsSeries = [];\ntry { blsSeries = first('Fetch BLS').Results.series || []; } catch (e) {}\nconst blsRows = (sid) => {\n  const s = blsSeries.find(x => x.seriesID === sid);\n  if (!s || !Array.isArray(s.data)) return [];\n  return s.data\n    .filter(d => /^M(0[1-9]|1[0-2])$/.test(d.period) && isFinite(Number(d.value)))\n    .map(d => ({ y: +d.year, m: +String(d.period).slice(1), v: Number(d.value) }))\n    .sort((a, b) => a.y - b.y || a.m - b.m)\n    .map(r => ({ d: `${r.y}-${String(r.m).padStart(2, '0')}`, v: r.v }));\n};\nconst perDate = (pd) => { const [y, m] = pd.split('-'); return `1/${+m}/${y}`; };\nconst levelLine = (labelTxt, rows) => {\n  if (rows.length < 2) return `  • ${labelTxt}: n/a`;\n  const cur = rows[rows.length - 1];\n  const last = rows[rows.length - 2];\n  return `  • ${labelTxt}: ${cur.v}% (last: ${last.v}% (as of ${perDate(last.d)}))`;\n};\nconst yoyLine = (labelTxt, rows) => {\n  if (rows.length < 14) return `  • ${labelTxt}: n/a`;\n  const cur = ((rows[rows.length - 1].v / rows[rows.length - 13].v) - 1) * 100;\n  const last = ((rows[rows.length - 2].v / rows[rows.length - 14].v) - 1) * 100;\n  return `  • ${labelTxt}: ${cur.toFixed(1)}% (last: ${last.toFixed(1)}% (as of ${perDate(rows[rows.length - 2].d)}))`;\n};\nconst fredLines = [\n  levelLine('Interest Rate', docRows(findDoc('RIFSPFF'))),\n  yoyLine('CPI', blsRows('CUUR0000SA0')),\n  levelLine('Unemployment Rate', blsRows('LNS14000000')),\n];\n\n// ── Top 3 headlines with publish time in SGT (CNBC RSS) ──\nlet newsLines = ['      • (news unavailable)'];\ntry {\n  const xml = String(first('Fetch News').data).replace(/[\\r\\n]/g, '');\n  const lines = xml.split('<item>').slice(1, 4).map(part => {\n    let t = (part.match(/<title>(.*?)<\\/title>/) || [])[1] || '';\n    t = t.replace(/<!\\[CDATA\\[|\\]\\]>/g, '')\n         .replace(/&amp;/g, '&').replace(/&#039;|&apos;/g, \"'\").replace(/&quot;/g, '\"').trim();\n    if (!t) return null;\n    let when = '';\n    const pd = (part.match(/<pubDate>(.*?)<\\/pubDate>/) || [])[1];\n    if (pd) {\n      const dt = new Date(pd);\n      if (!isNaN(dt)) {\n        const pp = sgtParts(dt, { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });\n        when = ` (${+pp.day}/${+pp.month}/${pp.year} ${pp.hour}:${pp.minute} SGT)`;\n      }\n    }\n    return `      • ${t}${when}`;\n  }).filter(Boolean);\n  if (lines.length) newsLines = lines;\n} catch (e) {}\n\n// ── Assemble (HTML parse mode: escape data, then add tags) ──\nconst warn = sourceName !== 'CNN' ? ' ⚠️ mirror value, CNN unreachable' : '';\nconst snapshot = [...quoteLines, ...fredLines, '  • Top 3 breaking news:', ...newsLines].join('\\n');\n\nconst text = [\n  '<b><u>📊 Daily Fear &amp; Greed Update</u></b>',\n  '',\n  `📈 Fear &amp; Greed Index: ${score} (${label})${deltaNote}${esc(warn)}`,\n  `📅 ${sgtDate}, ${sgtTime}`,\n  '',\n  '📉 Index:',\n  esc(snapshot),\n].join('\\n');\n\nreturn [{ json: { text, score, label, source: sourceName } }];\n"
       },
-      "id": "079efa12-2ab4-4bbf-8b46-402fe180b266",
+      "id": "c33520c1-0410-4fdf-936e-5a386c972a51",
       "name": "Build Summary",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        900,
+        1340,
         0
       ]
     },
@@ -280,12 +354,12 @@
           "appendAttribution": false
         }
       },
-      "id": "0f6d1424-82f9-4410-a91e-71ca86df1a62",
+      "id": "0b9b7134-bb88-4162-a038-57cf7cc90b7b",
       "name": "Send Summary",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        1120,
+        1560,
         0
       ]
     }
@@ -303,6 +377,17 @@
       ]
     },
     "Fetch Mirror": {
+      "main": [
+        [
+          {
+            "node": "Fetch Quotes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Quotes": {
       "main": [
         [
           {
@@ -325,6 +410,17 @@
       ]
     },
     "Fetch Macro": {
+      "main": [
+        [
+          {
+            "node": "Fetch BLS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch BLS": {
       "main": [
         [
           {
